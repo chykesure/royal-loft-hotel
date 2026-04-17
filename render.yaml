@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: royal-loft-hotel
+    runtime: node
+    plan: starter
+    buildCommand: npx prisma generate && npm run build
+    startCommand: npx prisma db push --skip-generate && npx next start -p $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: royal-loft-db
+          property: connectionString
+      - key: NEXT_PUBLIC_APP_NAME
+        value: Royal Loft Hotel
+      - key: NODE_ENV
+        value: production
+      - key: PRISMA_ENGINES_MIRROR
+        value: https://prisma-builds.s3-eu-west-1.amazonaws.com
+
+databases:
+  - name: royal-loft-db
+    plan: starter
+    databaseName: royal_loft
