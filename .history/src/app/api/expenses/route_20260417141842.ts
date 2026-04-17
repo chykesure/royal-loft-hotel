@@ -47,8 +47,8 @@ export async function GET(request: NextRequest) {
     }
 
     const expenses = await db.expense.findMany({
-      where: where as any,
-      orderBy: { date: 'desc' } as any,
+      where,
+      orderBy: { date: 'desc' },
       take: 200,
     });
 
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     const monthTotal = await db.expense.aggregate({
       _sum: { amount: true },
-      where: { date: { gte: monthStart, lte: monthEnd } } as any,
+      where: { date: { gte: monthStart, lte: monthEnd } },
     });
 
     const totalAll = await db.expense.aggregate({
@@ -73,8 +73,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       expenses,
       categorySummary,
-      thisMonthTotal: monthTotal._sum?.amount ?? 0,
-      totalAll: totalAll._sum?.amount ?? 0,
+      thisMonthTotal: monthTotal._sum.amount || 0,
+      totalAll: totalAll._sum.amount || 0,
     });
   } catch (error) {
     console.error('GET /api/expenses error:', error);
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
         receiptRef: receiptRef || null,
         notes: notes || null,
         createdBy: user.id,
-      } as any,
+      },
     });
 
     return NextResponse.json({ expense, message: 'Expense created successfully' });

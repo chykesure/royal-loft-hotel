@@ -510,7 +510,25 @@ model GuestFeedback {
   @@index([rating])
 }
 
+// ============ EXPENSES ============
 
+model Expense {
+  id            String    @id @default(cuid())
+  description   String
+  category      String    // utilities, salaries, supplies, maintenance, food_beverage, marketing, insurance, rent, tax, laundry, transport, miscellaneous
+  amount        Float
+  paymentMethod String    @default("cash") // cash, bank_transfer, pos, opay, palmpay, moniepoint
+  vendor        String?
+  reference     String?
+  expenseDate   DateTime
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([category])
+  @@index([expenseDate])
+}
 
 // ============ DEMAND FORECAST ============
 
@@ -575,32 +593,4 @@ model ChatbotConversation {
   @@index([sessionId])
 }
 
-// ============ ROLE MODULE ACCESS (Dynamic sidebar visibility) ============
 
-model RoleModuleAccess {
-  id        String   @id @default(cuid())
-  role      String   @unique // e.g. manager, front_desk, housekeeping, accountant, auditor, staff
-  modules   String   // JSON array of module keys this role can see, e.g. ["dashboard","rooms","billing"]
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
-}
-
-// ============ EXPENSES ============
-
-model Expense {
-  id          String   @id @default(cuid())
-  description String
-  category    String   // utilities, salaries, supplies, maintenance, marketing, miscellaneous
-  amount      Float
-  date        DateTime
-  paymentMethod String? // cash, bank_transfer, pos
-  vendor      String?
-  receiptRef  String?
-  notes       String?
-  createdBy   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([category])
-  @@index([date])
-}

@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
         receiptRef: receiptRef || null,
         notes: notes || null,
         createdBy: user.id,
-      } as any,
+      },
     });
 
     return NextResponse.json({ expense, message: 'Expense created successfully' });

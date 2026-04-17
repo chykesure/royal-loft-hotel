@@ -28,13 +28,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import {
-  Search, Plus, RefreshCw, Shield, CheckCircle, AlertTriangle, Users,
+    Search, Plus, RefreshCw, Shield, CheckCircle, AlertTriangle, Users,
   FileText, Pencil, Trash2, Save, KeyRound, Lock, Eye, RotateCcw, Code,
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/auth';
-import { useAuthStore } from '@/store/auth-store';
-import { useRoleAccessStore, CONFIGURABLE_ROLES, ALL_MODULE_KEYS, type ConfigurableRole, type ModuleKey } from '@/store/role-access-store';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/store/auth-store';
 
 interface User {
   id: string; email: string; name: string; phone?: string | null;
@@ -88,7 +87,6 @@ const MODULE_LABELS: Record<string, string> = {
   rooms: 'Rooms',
   guests: 'Guests',
   billing: 'Billing',
-  expenses: 'Expenses',
   accounts: 'Accounts',
   staff: 'Staff & Payroll',
   inventory: 'Inventory',
@@ -97,13 +95,12 @@ const MODULE_LABELS: Record<string, string> = {
   security: 'Security',
   cloud: 'Cloud Storage',
   settings: 'Settings',
-  developer_tools: 'Dev Tools',
 };
 
 const ALL_MODULES = [
   'dashboard', 'front_desk', 'reservations', 'rooms', 'guests',
-  'billing', 'expenses', 'accounts', 'staff', 'inventory', 'reports',
-  'rules', 'security', 'cloud', 'settings', 'developer_tools',
+  'billing', 'accounts', 'staff', 'inventory', 'reports',
+  'rules', 'security', 'cloud', 'settings',
 ];
 
 const ALL_ACTIONS = ['view', 'create', 'edit', 'delete'];
@@ -119,8 +116,6 @@ const ACTION_LABELS: Record<string, string> = {
 type PermState = Record<string, Record<string, Record<string, boolean>>>;
 
 export function SecurityModule() {
-  const { user } = useAuthStore();
-  const canManageUsers = user?.role === 'super_admin' || user?.role === 'developer';
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [alerts, setAlerts] = useState<SecurityAlert[]>([]);
@@ -128,6 +123,8 @@ export function SecurityModule() {
   const [userSearch, setUserSearch] = useState('');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const { user } = useAuthStore();
+  const canManageUsers = user?.role === 'super_admin' || user?.role === 'developer';
   const [form, setForm] = useState({
     name: '', email: '', password: '', phone: '', role: 'staff', department: '',
   });
@@ -168,6 +165,7 @@ export function SecurityModule() {
   const fetchPermissions = useCallback(async () => {
     try {
       setPermLoading(true);
+      // Initialize roles first
       await fetch('/api/security', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -178,6 +176,7 @@ export function SecurityModule() {
       if (res.ok) {
         const data = await res.json();
         setPermRoles(data.roles);
+        // Build permState from loaded data
         const state: PermState = {};
         for (const role of data.roles) {
           state[role.id] = {};
@@ -190,6 +189,7 @@ export function SecurityModule() {
               );
             }
           }
+          // If role is Super Admin, set all to true
           if (role.name === 'Super Admin') {
             for (const mod of ALL_MODULES) {
               for (const act of ALL_ACTIONS) {
@@ -368,7 +368,7 @@ export function SecurityModule() {
 
   const handlePermToggle = (roleId: string, module: string, action: string) => {
     const role = permRoles.find(r => r.id === roleId);
-    if (role?.name === 'Super Admin') return;
+    if (role?.name === 'Super Admin') return; // Can't change Super Admin
 
     setPermState(prev => ({
       ...prev,
@@ -386,7 +386,7 @@ export function SecurityModule() {
     try {
       setPermSaving(true);
       for (const role of permRoles) {
-        if (role.name === 'Super Admin') continue;
+        if (role.name === 'Super Admin') continue; // Skip Super Admin
 
         const modulePermissions: { module: string; actions: string[] }[] = [];
         for (const mod of ALL_MODULES) {
@@ -401,7 +401,7 @@ export function SecurityModule() {
           }
         }
 
-        const res = await fetch('/api/security', {
+        await fetch('/api/security', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -410,12 +410,6 @@ export function SecurityModule() {
             modulePermissions,
           }),
         });
-
-        if (!res.ok) {
-          const err = await res.json();
-          toast.error(err.error || 'Failed to save permissions');
-          return;
-        }
       }
       toast.success('Permissions saved successfully');
     } catch {
@@ -447,9 +441,6 @@ export function SecurityModule() {
           {canManageUsers && (
             <TabsTrigger value="permissions"><Shield className="h-4 w-4 mr-1.5" /> Permissions</TabsTrigger>
           )}
-          {canManageUsers && (
-            <TabsTrigger value="module-access"><Eye className="h-4 w-4 mr-1.5" /> Module Access</TabsTrigger>
-          )}
         </TabsList>
 
         {/* ==================== USERS TAB ==================== */}
@@ -462,35 +453,35 @@ export function SecurityModule() {
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={fetchData}><RefreshCw className="h-4 w-4" /></Button>
               {canManageUsers && (
-              <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"><Plus className="h-4 w-4 mr-1" /> Add User</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
-                  <div className="grid gap-4 py-2">
-                    <div className="grid gap-2"><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                    <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-                    <div className="grid gap-2"><Label>Password *</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label>Role</Label>
-                        <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {['super_admin', 'manager', 'front_desk', 'housekeeping', 'accountant', 'auditor', 'staff'].map(r => (
-                              <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"><Plus className="h-4 w-4 mr-1" /> Add User</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
+                    <div className="grid gap-4 py-2">
+                      <div className="grid gap-2"><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                      <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+                      <div className="grid gap-2"><Label>Password *</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label>Role</Label>
+                          <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {['super_admin', 'manager', 'front_desk', 'housekeeping', 'accountant', 'auditor', 'staff'].map(r => (
+                                <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
                       </div>
-                      <div className="grid gap-2"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+                      <div className="grid gap-2"><Label>Department</Label><Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
+                      <Button onClick={handleCreateUser} className="bg-amber-500 hover:bg-amber-600 text-white">Create User</Button>
                     </div>
-                    <div className="grid gap-2"><Label>Department</Label><Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
-                    <Button onClick={handleCreateUser} className="bg-amber-500 hover:bg-amber-600 text-white">Create User</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </DialogContent>
+                </Dialog>
               )}
             </div>
           </div>
@@ -547,44 +538,44 @@ export function SecurityModule() {
                         </TableCell>
                         <TableCell className="text-right">
                           {canManageUsers && (
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground hover:text-amber-600"
-                              onClick={() => handleEditUser(user)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <AlertDialog open={deletingUser?.id === user.id} onOpenChange={(open) => { if (!open) setDeletingUser(null); else setDeletingUser(user); }}>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8 text-muted-foreground hover:text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete User</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete <span className="font-semibold">{user.name}</span>? This action cannot be undone. All associated data including sessions, staff profile, and audit logs references will be removed.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={handleDeleteUser}
-                                    className="bg-red-500 hover:bg-red-600 text-white"
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-muted-foreground hover:text-amber-600"
+                                onClick={() => handleEditUser(user)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <AlertDialog open={deletingUser?.id === user.id} onOpenChange={(open) => { if (!open) setDeletingUser(null); else setDeletingUser(user); }}>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-muted-foreground hover:text-red-600"
                                   >
-                                    Delete User
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete User</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to delete <span className="font-semibold">{user.name}</span>? This action cannot be undone. All associated data including sessions, staff profile, and audit logs references will be removed.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={handleDeleteUser}
+                                      className="bg-red-500 hover:bg-red-600 text-white"
+                                    >
+                                      Delete User
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
@@ -911,204 +902,7 @@ export function SecurityModule() {
             </div>
           </div>
         </TabsContent>
-
-        {/* ==================== MODULE ACCESS TAB ==================== */}
-        <TabsContent value="module-access" className="mt-4 space-y-4">
-          <ModuleAccessTab />
-        </TabsContent>
-
       </Tabs>
-    </div>
-  );
-}
-
-/* ==================== MODULE ACCESS SUB-COMPONENT ==================== */
-function ModuleAccessTab() {
-  const { accessMap, toggleModule, grantAll, revokeAll, resetToDefaults, saveToServer, isSaving } = useRoleAccessStore();
-
-  const ROLE_LABELS: Record<string, string> = {
-    manager: 'Manager',
-    front_desk: 'Front Desk',
-    housekeeping: 'Housekeeping',
-    accountant: 'Accountant',
-    auditor: 'Auditor',
-    staff: 'Staff',
-  };
-
-  const ROLE_BADGE_COLORS: Record<string, string> = {
-    manager: 'bg-purple-100 text-purple-700',
-    front_desk: 'bg-sky-100 text-sky-700',
-    housekeeping: 'bg-teal-100 text-teal-700',
-    accountant: 'bg-emerald-100 text-emerald-700',
-    auditor: 'bg-amber-100 text-amber-700',
-    staff: 'bg-gray-100 text-gray-700',
-  };
-
-  // Modules to show in the grid (exclude developer-only and admin-only modules)
-  const VISIBLE_MODULES = ALL_MODULE_KEYS.filter(
-    (m) => m !== 'developer_tools' && m !== 'cloud' && m !== 'security'
-  );
-
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Eye className="h-5 w-5 text-amber-600" />
-            Module Visibility Control
-          </h3>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Choose which modules each role can see in the sidebar. Changes take effect immediately.
-            Developer and Super Admin are not configurable — they have fixed access.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            className="bg-amber-500 hover:bg-amber-600 text-white"
-            onClick={() => saveToServer()}
-            disabled={isSaving}
-          >
-            <Save className="h-4 w-4 mr-1.5" />
-            {isSaving ? 'Saving...' : 'Save Changes'}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={async () => {
-              resetToDefaults();
-              await saveToServer();
-            }}
-            disabled={isSaving}
-          >
-            <RotateCcw className="h-4 w-4 mr-1.5" />
-            Reset Defaults
-          </Button>
-        </div>
-      </div>
-
-      {/* Fixed role info cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="flex items-center gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50/50">
-          <div className="h-8 w-8 rounded-lg bg-amber-500 flex items-center justify-center">
-            <Code className="h-4 w-4 text-white" />
-          </div>
-          <div className="flex-1">
-            <p className="font-medium text-sm">Developer</p>
-            <p className="text-xs text-muted-foreground">Full access to ALL modules (including Cloud Storage &amp; Dev Tools)</p>
-          </div>
-          <Badge className="bg-amber-500 text-white text-[10px]">ALL MODULES</Badge>
-        </div>
-        <div className="flex items-center gap-3 p-3 rounded-lg border border-red-200 bg-red-50/50">
-          <div className="h-8 w-8 rounded-lg bg-red-500 flex items-center justify-center">
-            <Shield className="h-4 w-4 text-white" />
-          </div>
-          <div className="flex-1">
-            <p className="font-medium text-sm">Super Admin</p>
-            <p className="text-xs text-muted-foreground">All modules EXCEPT Cloud Storage &amp; Dev Tools</p>
-          </div>
-          <Badge className="bg-red-500 text-white text-[10px]">MOST MODULES</Badge>
-        </div>
-      </div>
-
-      {/* Configurable roles grid */}
-      <Card className="border-none shadow-sm">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="sticky left-0 bg-background z-10 min-w-[150px]">Role</TableHead>
-                  {VISIBLE_MODULES.map((mod) => (
-                    <TableHead key={mod} className="min-w-[100px] text-center">
-                      <span className="text-[10px] font-medium uppercase tracking-wider">
-                        {MODULE_LABELS[mod] || mod}
-                      </span>
-                    </TableHead>
-                  ))}
-                  <TableHead className="min-w-[100px] text-center">
-                    <span className="text-[10px] font-medium uppercase tracking-wider">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {CONFIGURABLE_ROLES.map((role) => {
-                  const modules = accessMap[role];
-                  const moduleCount = modules ? modules.size : 0;
-
-                  return (
-                    <TableRow key={role}>
-                      <TableCell className="sticky left-0 bg-background z-10">
-                        <div className="flex items-center gap-2">
-                          <Badge className={`text-[10px] px-2 py-0.5 h-5 ${ROLE_BADGE_COLORS[role] || ''}`}>
-                            {ROLE_LABELS[role] || role}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">({moduleCount})</span>
-                        </div>
-                      </TableCell>
-                      {VISIBLE_MODULES.map((mod) => (
-                        <TableCell key={mod} className="text-center p-1.5">
-                          <Checkbox
-                            checked={modules?.has(mod) || false}
-                            onCheckedChange={() => toggleModule(role, mod)}
-                            disabled={mod === 'dashboard'}
-                            className="h-4 w-4 rounded"
-                          />
-                        </TableCell>
-                      ))}
-                      <TableCell className="text-center p-1">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-[10px] text-green-600 hover:text-green-700 hover:bg-green-50"
-                            onClick={() => grantAll(role)}
-                            title="Grant all modules"
-                          >
-                            All
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-[10px] text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => revokeAll(role)}
-                            title="Revoke all (except Dashboard)"
-                          >
-                            None
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Legend */}
-      <div className="flex items-center gap-6 text-xs text-muted-foreground px-1">
-        <div className="flex items-center gap-1.5">
-          <Checkbox checked disabled className="h-4 w-4 rounded" />
-          <span>Visible</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Checkbox className="h-4 w-4 rounded" />
-          <span>Hidden</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Checkbox checked disabled className="h-4 w-4 rounded opacity-50" />
-          <span>Dashboard (always visible)</span>
-        </div>
-      </div>
-
-      {/* Note */}
-      <p className="text-xs text-muted-foreground px-1">
-        Note: Cloud Storage and Developer Tools are restricted to the Developer role only and cannot be granted to other roles.
-        Security module access is controlled via the Permissions tab above.
-      </p>
     </div>
   );
 }

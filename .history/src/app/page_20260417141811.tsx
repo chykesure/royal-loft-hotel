@@ -46,6 +46,7 @@ const moduleComponents: Record<ModuleKey, React.ComponentType> = {
   'developer-tools': DeveloperToolsModule,
 };
 
+// Map sidebar module key to permission module name
 const MODULE_PERM_MAP: Record<ModuleKey, string> = {
   dashboard: 'dashboard',
   'front-desk': 'front_desk',
@@ -73,6 +74,7 @@ export default function Home() {
   useEffect(() => {
     const initAuthAndAccess = async () => {
       try {
+        // Verify auth
         const res = await fetch('/api/auth/verify');
         if (res.ok) {
           const data = await res.json();
@@ -92,15 +94,17 @@ export default function Home() {
     initAuthAndAccess();
   }, [setUser, setPermissions]);
 
+  // Initialize role-access store
   useEffect(() => {
     if (!isLoaded) init();
   }, [isLoaded, init]);
 
-  // Guard: redirect to dashboard if current module is not allowed
+  // If the current module is not allowed for this user, redirect to dashboard
   useEffect(() => {
     if (!user || !isLoaded) return;
     const role = user.role;
     const permModule = MODULE_PERM_MAP[currentModule];
+    // canSee() already handles developer (sees all) and super_admin (blocks cloud/dev-tools)
     if (canSee(role, permModule)) return;
     setCurrentModule('dashboard');
   }, [user, isLoaded, currentModule, setCurrentModule, canSee]);

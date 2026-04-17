@@ -510,7 +510,25 @@ model GuestFeedback {
   @@index([rating])
 }
 
+// ============ EXPENSES ============
 
+model Expense {
+  id            String    @id @default(cuid())
+  description   String
+  category      String    // utilities, salaries, supplies, maintenance, food_beverage, marketing, insurance, rent, tax, laundry, transport, miscellaneous
+  amount        Float
+  paymentMethod String    @default("cash") // cash, bank_transfer, pos, opay, palmpay, moniepoint
+  vendor        String?
+  reference     String?
+  expenseDate   DateTime
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([category])
+  @@index([expenseDate])
+}
 
 // ============ DEMAND FORECAST ============
 

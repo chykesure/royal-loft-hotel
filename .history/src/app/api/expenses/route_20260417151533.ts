@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const month = searchParams.get('month');
+    const month = searchParams.get('month'); // format: "2026-04"
 
     const where: Record<string, unknown> = {};
 
@@ -46,18 +46,19 @@ export async function GET(request: NextRequest) {
       where.date = { gte: start, lte: end };
     }
 
-    const expenses = await db.expense.findMany({
-      where: where as any,
-      orderBy: { date: 'desc' } as any,
-      take: 200,
+        const monthTotal = await db.expense.aggregate({
+      _sum: { amount: true },
+      where: { date: { gte: monthStart, lte: monthEnd } } as any,
     });
 
+    // Category summary
     const categorySummary = await db.expense.groupBy({
       by: ['category'],
       _sum: { amount: true },
       _count: { id: true },
     });
 
+    // Total for current month
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -65,7 +66,6 @@ export async function GET(request: NextRequest) {
       _sum: { amount: true },
       where: { date: { gte: monthStart, lte: monthEnd } } as any,
     });
-
     const totalAll = await db.expense.aggregate({
       _sum: { amount: true },
     });
@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body;
 
+    // Delete multiple
     if (action === 'delete-many') {
       const { ids } = body as { ids: string[] };
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, message: `${ids.length} expenses deleted` });
     }
 
+    // Create single
     const { description, category, amount, date, paymentMethod, vendor, receiptRef, notes } = body;
 
     if (!description || !category || !amount || !date) {
@@ -122,7 +124,7 @@ export async function POST(request: NextRequest) {
         receiptRef: receiptRef || null,
         notes: notes || null,
         createdBy: user.id,
-      } as any,
+      },
     });
 
     return NextResponse.json({ expense, message: 'Expense created successfully' });

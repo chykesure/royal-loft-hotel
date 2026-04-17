@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const expense = await db.expense.create({
+        const expense = await db.expense.create({
       data: {
         description,
         category,

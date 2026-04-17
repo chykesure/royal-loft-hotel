@@ -66,6 +66,7 @@ export function AppSidebar() {
   const { user, logout } = useAuthStore();
   const { canSee, isLoaded, init } = useRoleAccessStore();
 
+  // Initialize the role-access store on first mount
   useEffect(() => {
     if (!isLoaded) init();
   }, [isLoaded, init]);
@@ -90,11 +91,11 @@ export function AppSidebar() {
 
   const roleLabel = user?.role?.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase()) || 'Staff';
 
-  // Filter using ONLY canSee() — no hardcoded fallbacks
+  // Filter menu items using the dynamic role-access store ONLY
   const visibleItems = menuItems.filter((item) => {
     const role = user?.role;
     if (!role) return false;
-    if (!isLoaded) return false;
+    if (!isLoaded) return false; // Wait for store to load
     return canSee(role, item.permModule);
   });
 
