@@ -59,7 +59,7 @@ export async function GET() {
     const reserved = await db.room.count({ where: { status: 'reserved' } });
 
     // Revenue chart - last 7 days
-        const revenueData: any[] = [];
+    const revenueData = [];
     for (let i = 6; i >= 0; i--) {
       const dayStart = new Date(today);
       dayStart.setDate(dayStart.getDate() - i);
@@ -204,7 +204,6 @@ export async function GET() {
         activeReservations,
         checkInsToday,
         checkOutsToday,
-        overdueCheckouts: overdueCheckouts.length,
       },
       roomStatus: {
         available,
@@ -217,7 +216,6 @@ export async function GET() {
       recentReservations,
       arrivals,
       departures,
-      overdueCheckouts,
       systemOverview: {
         totalUsers,
         totalRooms,

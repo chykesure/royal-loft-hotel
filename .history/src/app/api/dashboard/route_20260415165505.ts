@@ -37,21 +37,6 @@ export async function GET() {
       },
     });
 
-    // Overdue checkouts: checked_in guests whose checkout date has passed
-    const overdueCheckouts = await db.reservation.findMany({
-      where: {
-        status: 'checked_in',
-        checkOut: { lt: today },
-      },
-      include: {
-        guest: { select: { firstName: true, lastName: true, phone: true } },
-        room: { select: { roomNumber: true } },
-      },
-      orderBy: { checkOut: 'asc' },
-    });
-
-    // Room status counts
-
     // Room status counts
     const available = await db.room.count({ where: { status: 'available' } });
     const housekeeping = await db.room.count({ where: { status: 'housekeeping' } });
@@ -59,7 +44,7 @@ export async function GET() {
     const reserved = await db.room.count({ where: { status: 'reserved' } });
 
     // Revenue chart - last 7 days
-        const revenueData: any[] = [];
+    const revenueData = [];
     for (let i = 6; i >= 0; i--) {
       const dayStart = new Date(today);
       dayStart.setDate(dayStart.getDate() - i);
@@ -204,7 +189,6 @@ export async function GET() {
         activeReservations,
         checkInsToday,
         checkOutsToday,
-        overdueCheckouts: overdueCheckouts.length,
       },
       roomStatus: {
         available,
@@ -217,7 +201,6 @@ export async function GET() {
       recentReservations,
       arrivals,
       departures,
-      overdueCheckouts,
       systemOverview: {
         totalUsers,
         totalRooms,
