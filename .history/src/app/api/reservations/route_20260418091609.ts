@@ -61,8 +61,7 @@ export async function POST(request: NextRequest) {
     }
 
     const roomRate = room.roomType.baseRate;
-    const calcTotal = roomRate * nights;
-    const totalAmount = overrideTotal ? parseFloat(overrideTotal) : calcTotal;
+    const totalAmount = roomRate * nights;
 
     const reservation = await db.reservation.create({
       data: {

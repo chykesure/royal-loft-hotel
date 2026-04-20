@@ -215,13 +215,13 @@ export async function GET(request: NextRequest) {
       const exps = await db.expense.findMany({
         take: 100,
         orderBy: { date: 'desc' },
-      } as any);
+      });
 
       expenseTx = exps
-        .filter(e => new Date(e.expenseDate) >= startDate && new Date(e.expenseDate) <= endDate)
+        .filter(e => e.date >= startDate && e.date <= endDate)
         .map((e: any) => ({
           id: e.id,
-          date: e.expenseDate,
+          date: e.date,
           description: e.description || e.category,
           amount: e.amount,
           type: 'expense' as const,

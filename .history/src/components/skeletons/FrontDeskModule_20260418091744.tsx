@@ -278,7 +278,7 @@ export function FrontDeskModule() {
       if (!guestRes.ok) throw new Error('Failed to create guest');
       const guest = await guestRes.json();
 
-      // 2. Create reservation (pass discounted total so reservation table matches)
+            // 2. Create reservation (pass discounted total so reservation table matches)
       const resRes = await fetch('/api/reservations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -664,7 +664,7 @@ export function FrontDeskModule() {
                   <div className="grid gap-1.5"><Label>Adults</Label>
                     <Select value={wiAdults} onValueChange={setWiAdults}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{['1', '2', '3', '4'].map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                      <SelectContent>{['1','2','3','4'].map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="grid gap-1.5"><Label>Check-in</Label><Input type="date" value={wiCheckIn} onChange={e => setWiCheckIn(e.target.value)} /></div>

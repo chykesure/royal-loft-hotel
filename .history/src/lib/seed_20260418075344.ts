@@ -246,7 +246,7 @@ export async function seedDatabase() {
   console.log('🌱 Seeding Royal Loft database with real transaction data...');
 
   // ─── 1. Admin User ─────────────────────────────────────────────────────────
-  const adminExists = await db.user.findUnique({ where: { email: 'admin@royalloft.com' } });
+   const adminExists = await db.user.findUnique({ where: { email: 'admin@royalloft.com' } });
   if (!adminExists) {
     const hashedPassword = await hashPassword('Admin@123');
     await db.user.create({

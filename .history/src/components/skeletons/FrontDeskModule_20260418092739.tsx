@@ -282,7 +282,7 @@ export function FrontDeskModule() {
       const resRes = await fetch('/api/reservations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId: guest.id, roomId: wiRoomId, checkIn: wiCheckIn, checkOut: wiCheckOut, adults: parseInt(wiAdults) || 1, source: 'walk_in', totalAmount: wiGrandTotal }),
+                body: JSON.stringify({ guestId: guest.id, roomId: wiRoomId, checkIn: wiCheckIn, checkOut: wiCheckOut, adults: parseInt(wiAdults) || 1, source: 'walk_in', totalAmount: wiGrandTotal }),
       });
       if (!resRes.ok) throw new Error('Failed to create reservation');
       const reservation = await resRes.json();

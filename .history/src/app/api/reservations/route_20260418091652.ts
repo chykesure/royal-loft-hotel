@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Check-out must be after check-in' }, { status: 400 });
     }
 
-    const roomRate = room.roomType.baseRate;
+        const roomRate = room.roomType.baseRate;
     const calcTotal = roomRate * nights;
     const totalAmount = overrideTotal ? parseFloat(overrideTotal) : calcTotal;
 

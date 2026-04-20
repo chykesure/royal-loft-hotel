@@ -15,28 +15,22 @@ import { toast } from 'sonner';
 import {
   UserCheck, UserMinus, Clock, LogIn, Search, Loader2,
   ArrowDownCircle, ArrowUpCircle, BedDouble, X, CheckCircle2,
-  CreditCard,
+  CreditCard, AlertCircle,
 } from 'lucide-react';
-import { formatCurrency, formatDate } from '@/lib/auth';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/auth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface RoomType { id: string; name: string; baseRate: number; maxOccupancy: number; }
 interface Room { id: string; roomNumber: string; floor: number; status: string; roomTypeId: string; roomType: RoomType; }
 interface Guest { id: string; firstName: string; lastName: string; phone: string; email: string; address?: string; }
-interface BillLine {
-  id: string; status: string; totalAmount: number; paidAmount: number; balanceAmount: number;
-  roomCharges: number; foodCharges: number; barCharges: number; spaCharges: number;
-  laundryCharges: number; otherCharges: number; taxAmount: number; discountAmount: number;
-  payments: Payment[];
-}
-interface Payment { id: string; amount: number; paymentMethod: string; paymentRef?: string; notes?: string; createdAt: string; }
 interface Reservation {
   id: string; confirmationCode: string; guestId: string; roomId: string;
   checkIn: string; checkOut: string; status: string; source: string;
   adults: number; children: number; roomRate: number; totalAmount: number;
   paidAmount: number; specialRequests?: string; checkedInAt?: string;
-  guest: Guest; room: Room; bill?: BillLine | null;
+  guest: Guest; room: Room; bill?: { id: string; status: string; totalAmount: number; paidAmount: number; balanceAmount: number; roomCharges: number; foodCharges: number; barCharges: number; spaCharges: number; laundryCharges: number; otherCharges: number; taxAmount: number; payments: Payment[] } | null;
 }
+interface Payment { id: string; amount: number; paymentMethod: string; paymentRef?: string; notes?: string; createdAt: string; }
 
 const ID_TYPES = ['NIN', 'Passport', 'Drivers License', 'Voters Card'];
 const PAYMENT_METHODS = ['cash', 'pos', 'bank_transfer', 'opay', 'palmpay', 'moniepoint'];
@@ -60,12 +54,14 @@ export function FrontDeskModule() {
       setAvailableRooms(roomsData.statusCounts?.available || 0);
       setOccupiedRooms(roomsData.statusCounts?.occupied || 0);
 
+      // Today's arrivals (confirmed reservations checking in today)
       const today = new Date().toISOString().split('T')[0];
       const resRes = await fetch('/api/reservations?status=confirmed');
       const allRes: Reservation[] = await resRes.json();
       const arrivals = allRes.filter(r => r.checkIn && r.checkIn.startsWith(today));
       setTodayArrivals(arrivals.length);
 
+      // Today's departures (checked_in reservations checking out today)
       const checkInRes = await fetch('/api/reservations?status=checked_in');
       const checkedIn: Reservation[] = await checkInRes.json();
       const departures = checkedIn.filter(r => r.checkOut && r.checkOut.startsWith(today));
@@ -89,7 +85,6 @@ export function FrontDeskModule() {
   const [ciRoomId, setCiRoomId] = useState('');
   const [ciIdType, setCiIdType] = useState('');
   const [ciIdNumber, setCiIdNumber] = useState('');
-  const [ciDiscount, setCiDiscount] = useState('');
   const [ciProcessing, setCiProcessing] = useState(false);
 
   const handleCiSearch = async () => {
@@ -109,6 +104,7 @@ export function FrontDeskModule() {
     if (!ciSelected) return toast.error('Select a reservation first');
     setCiProcessing(true);
     try {
+      // 1. Update reservation status to checked_in
       const res = await fetch('/api/reservations', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -117,6 +113,7 @@ export function FrontDeskModule() {
       if (!res.ok) throw new Error();
       const updated = await res.json();
 
+      // 2. Create bill if none exists
       const nights = Math.max(1, Math.ceil((new Date(ciSelected.checkOut).getTime() - new Date(ciSelected.checkIn).getTime()) / 86400000));
       const roomCharges = ciSelected.roomRate * nights;
       if (!ciSelected.bill) {
@@ -127,7 +124,7 @@ export function FrontDeskModule() {
             guestId: ciSelected.guestId,
             reservationId: ciSelected.id,
             roomCharges,
-            discountAmount: parseFloat(ciDiscount) || 0,
+            taxAmount: Math.round(roomCharges * 0.075),
           }),
         });
       }
@@ -138,7 +135,6 @@ export function FrontDeskModule() {
       setCiSearchResults([]);
       setCiIdType('');
       setCiIdNumber('');
-      setCiDiscount('');
       setCiRoomId('');
       loadData();
     } catch { toast.error('Check-in failed'); }
@@ -163,6 +159,7 @@ export function FrontDeskModule() {
     try {
       const res = await fetch(`/api/reservations?status=checked_in&guest=${encodeURIComponent(coSearch)}`);
       const data: Reservation[] = await res.json();
+      // Also search by room number
       const roomMatch = data.filter(r =>
         r.room.roomNumber.toLowerCase().includes(coSearch.toLowerCase())
       );
@@ -174,13 +171,14 @@ export function FrontDeskModule() {
 
   const handleCoSelect = async (res: Reservation) => {
     setCoSelected(res);
+    // Fetch full reservation with bill details
     try {
       const allRes = await fetch('/api/reservations?guest=');
       const all: Reservation[] = await allRes.json();
       const full = all.find(r => r.id === res.id);
       if (full?.bill) {
-        setCoSelected({ ...res, bill: full.bill });
-        setCoPaymentAmount(String(Math.max(0, full.bill.balanceAmount || 0)));
+        setCoSelected({ ...res, bill: full.bill as any });
+        setCoPaymentAmount(String(Math.max(0, (full.bill as any).balanceAmount || 0)));
       }
     } catch { /* use what we have */ }
   };
@@ -193,12 +191,14 @@ export function FrontDeskModule() {
 
     setCoProcessing(true);
     try {
+      // Record payment
       await fetch('/api/billing/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ billId: coSelected.bill.id, amount, paymentMethod: coPaymentMethod, notes: 'Checkout payment' }),
       });
 
+      // Update reservation to checked_out
       await fetch('/api/reservations', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -248,15 +248,13 @@ export function FrontDeskModule() {
   const [wiCheckOut, setWiCheckOut] = useState('');
   const [wiIdType, setWiIdType] = useState('');
   const [wiIdNumber, setWiIdNumber] = useState('');
-  const [wiDiscount, setWiDiscount] = useState('');
   const [wiProcessing, setWiProcessing] = useState(false);
 
   const wiSelectedType = roomTypes.find(rt => rt.id === wiRoomTypeId);
   const wiAvailableRooms = rooms.filter(r => r.status === 'available' && r.roomTypeId === wiRoomTypeId);
+
   const wiNights = wiCheckIn && wiCheckOut ? Math.max(1, Math.ceil((new Date(wiCheckOut).getTime() - new Date(wiCheckIn).getTime()) / 86400000)) : 0;
   const wiTotal = wiNights * (wiSelectedType?.baseRate || 0);
-  const wiDiscountAmt = parseFloat(wiDiscount) || 0;
-  const wiGrandTotal = Math.max(0, wiTotal - wiDiscountAmt);
 
   const handleWalkIn = async () => {
     if (!wiFirstName || !wiLastName || !wiPhone) return toast.error('Guest name and phone are required');
@@ -270,19 +268,16 @@ export function FrontDeskModule() {
       const guestRes = await fetch('/api/guests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: wiFirstName, lastName: wiLastName, phone: wiPhone,
-          email: wiEmail || undefined, idType: wiIdType || undefined, idNumber: wiIdNumber || undefined,
-        }),
+        body: JSON.stringify({ firstName: wiFirstName, lastName: wiLastName, phone: wiPhone, email: wiEmail || undefined, idType: wiIdType || undefined, idNumber: wiIdNumber || undefined }),
       });
       if (!guestRes.ok) throw new Error('Failed to create guest');
       const guest = await guestRes.json();
 
-      // 2. Create reservation (pass discounted total so reservation table matches)
+      // 2. Create reservation
       const resRes = await fetch('/api/reservations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId: guest.id, roomId: wiRoomId, checkIn: wiCheckIn, checkOut: wiCheckOut, adults: parseInt(wiAdults) || 1, source: 'walk_in', totalAmount: wiGrandTotal }),
+        body: JSON.stringify({ guestId: guest.id, roomId: wiRoomId, checkIn: wiCheckIn, checkOut: wiCheckOut, adults: parseInt(wiAdults) || 1, source: 'walk_in' }),
       });
       if (!resRes.ok) throw new Error('Failed to create reservation');
       const reservation = await resRes.json();
@@ -294,17 +289,19 @@ export function FrontDeskModule() {
         body: JSON.stringify({ id: reservation.id, status: 'checked_in' }),
       });
 
-      // 4. Create bill with optional discount
+      // 4. Create bill
+      const roomCharges = wiTotal;
       await fetch('/api/billing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ guestId: guest.id, reservationId: reservation.id, roomCharges: wiTotal, discountAmount: wiDiscountAmt }),
+        body: JSON.stringify({ guestId: guest.id, reservationId: reservation.id, roomCharges, taxAmount: Math.round(roomCharges * 0.075) }),
       });
 
       toast.success(`Walk-in registered! ${wiFirstName} ${wiLastName} — Room ${rooms.find(r => r.id === wiRoomId)?.roomNumber || ''} (${wiNights} night${wiNights > 1 ? 's' : ''})`);
+      // Reset form
       setWiFirstName(''); setWiLastName(''); setWiPhone(''); setWiEmail('');
       setWiRoomTypeId(''); setWiRoomId(''); setWiAdults('1');
-      setWiIdType(''); setWiIdNumber(''); setWiDiscount('');
+      setWiIdType(''); setWiIdNumber('');
       setWiCheckOut('');
       loadData();
     } catch (e: any) {
@@ -384,7 +381,7 @@ export function FrontDeskModule() {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{r.guest.firstName} {r.guest.lastName}</p>
                       <p className="text-xs text-muted-foreground">Room {r.room.roomNumber} ({r.room.roomType.name}) &middot; {r.confirmationCode}</p>
-                      <p className="text-xs text-muted-foreground">{formatDate(r.checkIn)} &rarr; {formatDate(r.checkOut)} &middot; {formatCurrency(r.totalAmount)}</p>
+                      <p className="text-xs text-muted-foreground">{formatDate(r.checkIn)} → {formatDate(r.checkOut)} &middot; {formatCurrency(r.totalAmount)}</p>
                     </div>
                     <Badge variant="outline" className="ml-2 shrink-0">{r.source.replace(/_/g, ' ')}</Badge>
                   </div>
@@ -415,24 +412,27 @@ export function FrontDeskModule() {
                   <div className="flex justify-between font-bold"><span>Total</span><span className="text-amber-600">{formatCurrency(ciSelected.totalAmount)}</span></div>
                 </div>
 
-                {/* Room Selection — ALL types grouped */}
+                {/* Room Selection — shows ALL room types */}
                 <div className="grid gap-2">
                   <Label>Assigned Room <span className="text-muted-foreground font-normal">(change if needed)</span></Label>
                   <Select value={ciRoomId} onValueChange={setCiRoomId}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Select room" /></SelectTrigger>
                     <SelectContent>
-                      {roomTypes.map(rt => (
-                        <div key={rt.id}>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">
-                            {rt.name} &mdash; {formatCurrency(rt.baseRate)}/night
+                      {roomTypes.map(rt => {
+                        const typeRooms = rooms.filter(r => r.status === 'available' || r.id === ciRoomId);
+                        const filtered = typeRooms.filter(r => r.roomTypeId === rt.id);
+                        if (filtered.length === 0 && !rooms.some(r => r.roomTypeId === rt.id)) return null;
+                        return (
+                          <div key={rt.id}>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted/50">{rt.name} — {formatCurrency(rt.baseRate)}/night</div>
+                            {rooms.filter(r => r.roomTypeId === rt.id).map(r => (
+                              <SelectItem key={r.id} value={r.id} disabled={r.status !== 'available' && r.id !== ciRoomId}>
+                                Room {r.roomNumber} (Floor {r.floor}) {r.status !== 'available' ? `— ${r.status}` : ''}
+                              </SelectItem>
+                            ))}
                           </div>
-                          {rooms.filter(r => r.roomTypeId === rt.id).map(r => (
-                            <SelectItem key={r.id} value={r.id} disabled={r.status !== 'available' && r.id !== ciRoomId}>
-                              Room {r.roomNumber} (Floor {r.floor}) {r.status !== 'available' ? `&mdash; ${r.status}` : ''}
-                            </SelectItem>
-                          ))}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -452,13 +452,6 @@ export function FrontDeskModule() {
                   </div>
                 </div>
 
-                {/* Discount */}
-                <div className="grid gap-2">
-                  <Label>Discount <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                  <Input type="number" placeholder="Enter discount amount" value={ciDiscount} onChange={e => setCiDiscount(e.target.value)} min="0" />
-                </div>
-
-                {/* Special Requests */}
                 <div className="grid gap-2">
                   <Label>Special Requests</Label>
                   <Input placeholder="Any special requests..." />
@@ -519,24 +512,24 @@ export function FrontDeskModule() {
                   <div className="rounded-lg border p-4 bg-muted/20 space-y-2">
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Room {coSelected.room.roomNumber} ({coSelected.room.roomType.name})</span><Badge variant="outline">Checked In</Badge></div>
                     <div className="flex justify-between text-sm"><span className="text-muted-foreground">Guest</span><span>{coSelected.guest.firstName} {coSelected.guest.lastName}</span></div>
-                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Stay</span><span>{formatDate(coSelected.checkIn)} &rarr; {formatDate(coSelected.checkOut)}</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-muted-foreground">Stay</span><span>{formatDate(coSelected.checkIn)} → {formatDate(coSelected.checkOut)}</span></div>
                     <Separator />
                     {coSelected.bill ? (
                       <>
                         <div className="flex justify-between text-sm"><span>Room Charges</span><span>{formatCurrency(coSelected.bill.roomCharges)}</span></div>
-                        {coSelected.bill.foodCharges > 0 && <div className="flex justify-between text-sm"><span>Food &amp; Beverage</span><span>{formatCurrency(coSelected.bill.foodCharges)}</span></div>}
+                        {coSelected.bill.foodCharges > 0 && <div className="flex justify-between text-sm"><span>Food & Beverage</span><span>{formatCurrency(coSelected.bill.foodCharges)}</span></div>}
                         {coSelected.bill.barCharges > 0 && <div className="flex justify-between text-sm"><span>Bar</span><span>{formatCurrency(coSelected.bill.barCharges)}</span></div>}
                         {coSelected.bill.spaCharges > 0 && <div className="flex justify-between text-sm"><span>Spa</span><span>{formatCurrency(coSelected.bill.spaCharges)}</span></div>}
                         {coSelected.bill.laundryCharges > 0 && <div className="flex justify-between text-sm"><span>Laundry</span><span>{formatCurrency(coSelected.bill.laundryCharges)}</span></div>}
                         {coSelected.bill.otherCharges > 0 && <div className="flex justify-between text-sm"><span>Other</span><span>{formatCurrency(coSelected.bill.otherCharges)}</span></div>}
-                        {coSelected.bill.discountAmount > 0 && <div className="flex justify-between text-sm text-green-600"><span>Discount</span><span>-{formatCurrency(coSelected.bill.discountAmount)}</span></div>}
+                        {coSelected.bill.taxAmount > 0 && <div className="flex justify-between text-sm"><span>Tax (7.5%)</span><span>{formatCurrency(coSelected.bill.taxAmount)}</span></div>}
                         <Separator />
                         <div className="flex justify-between font-bold"><span>Total Bill</span><span>{formatCurrency(coSelected.bill.totalAmount)}</span></div>
                         <div className="flex justify-between text-sm text-green-600"><span>Already Paid</span><span>{formatCurrency(coSelected.bill.paidAmount)}</span></div>
                         <div className="flex justify-between font-bold text-red-600"><span>Balance Due</span><span>{formatCurrency(coSelected.bill.balanceAmount)}</span></div>
                       </>
                     ) : (
-                      <p className="text-sm text-muted-foreground">No bill on record &mdash; checkout will use reservation total: {formatCurrency(coSelected.totalAmount)}</p>
+                      <p className="text-sm text-muted-foreground">No bill on record — checkout will use reservation total: {formatCurrency(coSelected.totalAmount)}</p>
                     )}
                   </div>
                 </CardContent>
@@ -628,7 +621,7 @@ export function FrontDeskModule() {
             <Card className="border-none shadow-sm">
               <CardHeader className="pb-3"><CardTitle className="text-base">Room &amp; Stay Details</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                {/* Room Type — ALL types from DB */}
+                {/* Room Type Selection — shows ALL types from DB */}
                 <div className="grid gap-1.5">
                   <Label>Room Type *</Label>
                   <Select value={wiRoomTypeId} onValueChange={v => { setWiRoomTypeId(v); setWiRoomId(''); }}>
@@ -636,14 +629,14 @@ export function FrontDeskModule() {
                     <SelectContent>
                       {roomTypes.map(rt => (
                         <SelectItem key={rt.id} value={rt.id}>
-                          {rt.name} &mdash; {formatCurrency(rt.baseRate)}/night ({rooms.filter(r => r.roomTypeId === rt.id && r.status === 'available').length} available)
+                          {rt.name} — {formatCurrency(rt.baseRate)}/night ({rooms.filter(r => r.roomTypeId === rt.id && r.status === 'available').length} available)
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Room — filtered by type, only available */}
+                {/* Room Selection — filtered by type, only available */}
                 {wiRoomTypeId && (
                   <div className="grid gap-1.5">
                     <Label>Select Room *</Label>
@@ -664,7 +657,7 @@ export function FrontDeskModule() {
                   <div className="grid gap-1.5"><Label>Adults</Label>
                     <Select value={wiAdults} onValueChange={setWiAdults}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{['1', '2', '3', '4'].map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
+                      <SelectContent>{['1','2','3','4'].map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="grid gap-1.5"><Label>Check-in</Label><Input type="date" value={wiCheckIn} onChange={e => setWiCheckIn(e.target.value)} /></div>
@@ -674,21 +667,13 @@ export function FrontDeskModule() {
                   <Input type="date" value={wiCheckOut} onChange={e => setWiCheckOut(e.target.value)} min={wiCheckIn} />
                 </div>
 
-                {/* Discount */}
-                <div className="grid gap-1.5">
-                  <Label>Discount <span className="text-muted-foreground font-normal">(optional)</span></Label>
-                  <Input type="number" placeholder="Enter discount amount (optional)" value={wiDiscount} onChange={e => setWiDiscount(e.target.value)} min="0" />
-                </div>
-
                 {/* Price Summary */}
                 {wiNights > 0 && wiSelectedType && (
                   <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-1">
                     <div className="flex justify-between text-sm"><span>{wiSelectedType.name} x {wiNights} night{wiNights > 1 ? 's' : ''}</span><span>{formatCurrency(wiTotal)}</span></div>
-                    {wiDiscountAmt > 0 && (
-                      <div className="flex justify-between text-sm text-green-600"><span>Discount</span><span>-{formatCurrency(wiDiscountAmt)}</span></div>
-                    )}
+                    <div className="flex justify-between text-sm"><span>Tax (7.5%)</span><span>{formatCurrency(Math.round(wiTotal * 0.075))}</span></div>
                     <Separator />
-                    <div className="flex justify-between font-bold text-amber-700"><span>Estimated Total</span><span>{formatCurrency(wiGrandTotal)}</span></div>
+                    <div className="flex justify-between font-bold text-amber-700"><span>Estimated Total</span><span>{formatCurrency(wiTotal + Math.round(wiTotal * 0.075))}</span></div>
                   </div>
                 )}
 

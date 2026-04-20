@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const session = await db.session.findFirst({
+        const session = await db.session.findFirst({
       where: { token },
       include: { user: true },
     });
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
     const expenses = await db.expense.findMany({
       where: { date: { gte: startDate, lte: endDate } },
       select: { amount: true, category: true },
-    } as any);
+    });
 
     const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
 
@@ -215,13 +215,13 @@ export async function GET(request: NextRequest) {
       const exps = await db.expense.findMany({
         take: 100,
         orderBy: { date: 'desc' },
-      } as any);
+      });
 
       expenseTx = exps
-        .filter(e => new Date(e.expenseDate) >= startDate && new Date(e.expenseDate) <= endDate)
+        .filter(e => e.date >= startDate && e.date <= endDate)
         .map((e: any) => ({
           id: e.id,
-          date: e.expenseDate,
+          date: e.date,
           description: e.description || e.category,
           amount: e.amount,
           type: 'expense' as const,

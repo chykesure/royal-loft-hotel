@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { guestId, roomId, checkIn, checkOut, adults, children, source, specialRequests, notes, totalAmount: overrideTotal } = body;
+        const { guestId, roomId, checkIn, checkOut, adults, children, source, specialRequests, notes, totalAmount: overrideTotal } = body;
     if (!guestId || !roomId || !checkIn || !checkOut) {
       return NextResponse.json({ error: 'Guest, room, and dates are required' }, { status: 400 });
     }
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Check-out must be after check-in' }, { status: 400 });
     }
 
-    const roomRate = room.roomType.baseRate;
+        const roomRate = room.roomType.baseRate;
     const calcTotal = roomRate * nights;
     const totalAmount = overrideTotal ? parseFloat(overrideTotal) : calcTotal;
 

@@ -218,7 +218,7 @@ export async function GET(request: NextRequest) {
       } as any);
 
       expenseTx = exps
-        .filter(e => new Date(e.expenseDate) >= startDate && new Date(e.expenseDate) <= endDate)
+                .filter(e => new Date(e.expenseDate) >= startDate && new Date(e.expenseDate) <= endDate)
         .map((e: any) => ({
           id: e.id,
           date: e.expenseDate,

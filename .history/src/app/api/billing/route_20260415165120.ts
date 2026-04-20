@@ -1,38 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { formatCurrency } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
-    const search = searchParams.get('search');
 
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
-    if (search) {
-      where.OR = [
-        { guest: { firstName: { contains: search } } },
-        { guest: { lastName: { contains: search } } },
-        { reservation: { confirmationCode: { contains: search } } },
-      ];
-    }
 
-    const bills = await db.bill.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        guest: { select: { id: true, firstName: true, lastName: true, phone: true } },
-        reservation: {
-          select: {
-            confirmationCode: true,
-            checkIn: true,
-            checkOut: true,
-            room: { select: { roomNumber: true, roomType: { select: { name: true } } } },
+    const bills = await db.bills.findMany
+      ? await db.bill.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            guest: { select: { id: true, firstName: true, lastName: true } },
+            reservation: { select: { confirmationCode: true } },
+            payments: { orderBy: { createdAt: 'desc' } },
           },
-        },
-        payments: { orderBy: { createdAt: 'desc' } },
-      },
-    });
+        })
+      : await db.bill.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            guest: { select: { id: true, firstName: true, lastName: true } },
+            reservation: { select: { confirmationCode: true } },
+            payments: { orderBy: { createdAt: 'desc' } },
+          },
+        });
 
     return NextResponse.json(bills);
   } catch (error: unknown) {
@@ -70,7 +66,7 @@ export async function POST(request: NextRequest) {
       },
       include: {
         guest: true,
-        reservation: { include: { room: { include: { roomType: true } } } },
+        reservation: true,
       },
     });
 
@@ -90,33 +86,15 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Bill ID is required' }, { status: 400 });
     }
 
-    // If totalAmount or balanceAmount is being updated, ensure consistency
-    if (data.totalAmount !== undefined) {
-      const existing = await db.bill.findUnique({ where: { id } });
-      if (existing) {
-        data.paidAmount = existing.paidAmount;
-        data.balanceAmount = (data.totalAmount || 0) - (existing.paidAmount || 0);
-      }
-    }
-
     const bill = await db.bill.update({
       where: { id },
       data,
       include: {
         guest: true,
-        reservation: { include: { room: { include: { roomType: true } } } },
+        reservation: true,
         payments: { orderBy: { createdAt: 'desc' } },
       },
     });
-
-    // Auto-update bill status based on payments
-    if (bill.paidAmount > 0 && bill.paidAmount < bill.totalAmount) {
-      await db.bill.update({ where: { id }, data: { status: 'partially_paid' } });
-    } else if (bill.paidAmount >= bill.totalAmount) {
-      await db.bill.update({ where: { id }, data: { status: 'paid', paidAt: new Date() } });
-    } else {
-      await db.bill.update({ where: { id }, data: { status: 'open' } });
-    }
 
     return NextResponse.json(bill);
   } catch (error: unknown) {
@@ -139,6 +117,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Bill not found' }, { status: 404 });
     }
 
+    // Delete associated payments first
     await db.payment.deleteMany({ where: { billId: id } });
     await db.bill.delete({ where: { id } });
 

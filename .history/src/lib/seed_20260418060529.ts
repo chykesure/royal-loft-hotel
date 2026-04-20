@@ -260,20 +260,6 @@ export async function seedDatabase() {
       },
     });
     console.log('✅ Admin user created');
-
-    // Developer user
-    const devHashed = await hashPassword('Admin@123');
-    await db.user.create({
-      data: {
-        email: 'developer@royalloft.com',
-        password: devHashed,
-        name: 'Developer',
-        role: 'developer',
-        department: 'management',
-        phone: '+234 801 000 0000',
-      },
-    });
-    console.log('✅ Developer user created');
   }
 
   // ─── 2. Roles ──────────────────────────────────────────────────────────────
@@ -332,7 +318,7 @@ export async function seedDatabase() {
   const guestCount = await db.guest.count();
   if (guestCount === 0) {
     // Deduplicate guests by name (case-insensitive) — keep first occurrence's details
-    const guestMap = new Map<string, { firstName: string; lastName: string; email: string; phone: string; address: string | null; idNumber: string | null; stayCount: number; originalIds: number[] }>();
+    const guestMap = new Map<string, { firstName: string; lastName: string; email: string; phone: string; address: string; idNumber: string; stayCount: number; originalIds: number[] }>();
 
     for (const tx of REAL_TRANSACTIONS) {
       const key = tx.name.trim().toUpperCase();
@@ -623,7 +609,7 @@ export async function seedDatabase() {
             reference: `EXP-${periodStr(expDate)}-${Math.floor(Math.random() * 9999).toString().padStart(4, '0')}`,
             createdBy: 'admin',
           },
-        } as any);
+        });
       }
     }
     console.log('✅ Expenses created (24 categories × 3 months = 72 records)');
