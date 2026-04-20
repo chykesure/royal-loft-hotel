@@ -617,6 +617,18 @@ model StaffAttendance {
   @@unique([staffId, date])
 }
 
+// ============ HOTEL SETTINGS ============
+
+model HotelSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  category  String   // hotel_profile, notifications, operations, billing, appearance
+  label     String   // human-readable label
+  type      String   @default("text") // text, number, boolean, select, json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
 
 // ============ HOTEL SETTINGS ============
 

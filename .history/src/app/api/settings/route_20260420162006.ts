@@ -104,7 +104,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
-    const results: any[] = [];
+    const results = [];
 
     for (const { key, value } of updates) {
       if (!key || value === undefined) continue;

@@ -32,9 +32,8 @@ export function generateConfirmationCode(): string {
   return `${prefix}-${code}`;
 }
 
-export function formatCurrency(amount: number | undefined | null): string {
-  const num = Number(amount) || 0;
-  return `₦${num.toLocaleString('en-NG')}`;
+export function formatCurrency(amount: number): string {
+  return `₦${amount.toLocaleString('en-NG')}`;
 }
 
 export function formatDate(date: Date | string): string {

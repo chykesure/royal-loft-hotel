@@ -26,7 +26,7 @@ model User {
   sessions      Session[]
   roles         Role[]
   staffProfile  StaffProfile?
-  staffAttendances     StaffAttendance[]
+  
   auditLogs     AuditLog[]
   maintenanceRequests MaintenanceRequest[]
   notifications Notification[]
@@ -615,18 +615,4 @@ model StaffAttendance {
   createdAt DateTime @default(now())
   staff     User     @relation(fields: [staffId], references: [id])
   @@unique([staffId, date])
-}
-
-
-// ============ HOTEL SETTINGS ============
-
-model HotelSetting {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  value     String
-  category  String
-  label     String
-  type      String   @default("text")
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
 }

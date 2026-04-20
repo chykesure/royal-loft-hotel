@@ -243,7 +243,7 @@ export function SettingsModule() {
               <Select value={get('hotel_star_rating', '4')} onValueChange={(v) => set('hotel_star_rating', v, 'hotel_profile')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {[1, 2, 3, 4, 5].map((s) => <SelectItem key={s} value={String(s)}>{s} Star{s > 1 ? 's' : ''}</SelectItem>)}
+                  {[1,2,3,4,5].map((s) => <SelectItem key={s} value={String(s)}>{s} Star{s > 1 ? 's' : ''}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -308,8 +308,8 @@ export function SettingsModule() {
               const toggle = () => {
                 const methods = isOn
                   ? currentMethods.filter((m) => m !== method.toLowerCase().replace(' ', '_'))
-                  : [...currentMethods, method.toLowerCase().replace(' ', '_')];
-                set('payment_methods', methods.join(','), 'billing');
+                  : [...currentMethods, method.key, method.toLowerCase().replace(' ', '_')];
+                set('payment_methods', (isOn ? currentMethods.filter((m) => m !== method.toLowerCase().replace(' ', '_')) : [...currentMethods, method.toLowerCase().replace(' ', '_')]).join(','), 'billing');
               };
               return (
                 <button key={method} onClick={toggle} className={`p-3 rounded-lg border text-center text-xs font-medium transition-all ${isOn ? 'border-emerald-300 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'border-muted bg-muted/30 text-muted-foreground hover:bg-muted/60'}`}>
