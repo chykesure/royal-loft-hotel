@@ -300,8 +300,7 @@ export function StaffPayrollModule() {
         body: JSON.stringify({ staffId, status }),
       });
       if (res.ok) {
-        const data = await res.json();
-        toast.success(data.message || `Marked as ${formatLabel(status)}`);
+        toast.success(`Marked as ${formatLabel(status)}`);
         fetchData();
       } else {
         const data = await res.json();
@@ -391,9 +390,8 @@ export function StaffPayrollModule() {
       } else {
         toast.error(data.error || 'Failed to process payment');
       }
-    } catch (err) {
-      console.error('Pay salary fetch error:', err);
-      toast.error('Network error - check if the server is running');
+    } catch {
+      toast.error('Failed to process payment');
     } finally {
       setIsPaying(false);
     }
@@ -656,8 +654,8 @@ export function StaffPayrollModule() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                          {/* Attendance P / L / A buttons — always visible */}
-                          {member.status !== 'terminated' && member.status !== 'suspended' && (
+                          {/* Attendance P / L buttons */}
+                          {member.status === 'active' && (
                             <div className="flex items-center gap-1">
                               <Button
                                 size="sm"
@@ -672,7 +670,6 @@ export function StaffPayrollModule() {
                                   e.stopPropagation();
                                   handleAttendance(member.id, 'present');
                                 }}
-                                title={attStatus === 'present' ? 'Click to undo Present' : 'Mark Present'}
                               >
                                 {isLoadingAtt ? <Loader2 className="h-3 w-3 animate-spin" /> : 'P'}
                               </Button>
@@ -689,26 +686,8 @@ export function StaffPayrollModule() {
                                   e.stopPropagation();
                                   handleAttendance(member.id, 'on_leave');
                                 }}
-                                title={attStatus === 'on_leave' ? 'Click to undo Leave' : 'Mark On Leave'}
                               >
-                                {isLoadingAtt ? <Loader2 className="h-3 w-3 animate-spin" /> : 'L'}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant={attStatus === 'absent' ? 'default' : 'outline'}
-                                className={`h-6 w-6 p-0 text-xs ${
-                                  attStatus === 'absent'
-                                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                                    : 'text-red-600 border-red-300'
-                                }`}
-                                disabled={isLoadingAtt}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAttendance(member.id, 'absent');
-                                }}
-                                title={attStatus === 'absent' ? 'Click to undo Absent' : 'Mark Absent'}
-                              >
-                                {isLoadingAtt ? <Loader2 className="h-3 w-3 animate-spin" /> : 'A'}
+                                L
                               </Button>
                             </div>
                           )}

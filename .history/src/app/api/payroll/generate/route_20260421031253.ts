@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { cookies } from 'next/headers';
 
+// POST /api/payroll/generate
+// Body: { period: "2026-04", staffList: [{ staffId, deductions }] }
 export async function POST(request: NextRequest) {
   try {
-    const token = request.cookies.get('auth_token')?.value;
+    // Auth using cookies() from next/headers (Next.js 16 compatible)
+    const cookieStore = await cookies();
+    const token = cookieStore.get('auth_token')?.value;
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -34,6 +39,7 @@ export async function POST(request: NextRequest) {
     for (const item of staffList) {
       const { staffId, deductions } = item;
 
+      // Check for existing payroll record for this staff+period
       const existing = await db.payrollRecord.findFirst({
         where: { staffId, period },
       });
@@ -43,6 +49,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // Get staff profile for base salary
       const profile = await db.staffProfile.findUnique({
         where: { id: staffId },
       });
@@ -76,10 +83,9 @@ export async function POST(request: NextRequest) {
       records,
     }, { status: 201 });
   } catch (error: unknown) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    console.error('Payroll generate error:', errMsg);
+    console.error('Payroll generate error:', error);
     return NextResponse.json(
-      { error: `Failed to generate payroll: ${errMsg}` },
+      { error: 'Failed to generate payroll' },
       { status: 500 }
     );
   }

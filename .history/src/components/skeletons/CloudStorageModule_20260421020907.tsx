@@ -31,7 +31,7 @@ import {
   Cloud, FolderOpen, Upload, Download, Eye, Trash2, Search, RefreshCw,
   FileText, FileImage, FileSpreadsheet, FileArchive, File,
   HardDrive, FolderPlus, X, AlertTriangle, Clock, Lock,
-  Image, FileType, Table, Archive, FileCode, Video,
+  FileCode, Video,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ export function CloudStorageModule() {
       toast.error(`${oversized.length} file(s) exceed the 10 MB limit and were skipped`);
     }
     const valid = newFiles.filter(f => f.size <= MAX_UPLOAD_SIZE);
-    setUploadFiles(prev => [...prev, ...valid].slice(0, 10));
+    setUploadFiles(prev => [...prev, ...valid].slice(0, 10)); // max 10 files at once
   };
 
   const removeFile = (index: number) => {
@@ -319,7 +319,7 @@ export function CloudStorageModule() {
 
   // ─── Storage usage bar ──────────────────────────────────────────────────
 
-  const storagePercent = Math.min((summary?.totalSize ?? 0) / (100 * 1024 * 1024) * 100, 100);
+  const storagePercent = Math.min((summary?.totalSize ?? 0) / (100 * 1024 * 1024) * 100, 100); // 100 MB reference
 
   // ─── Drag & Drop Handlers ───────────────────────────────────────────────
 
@@ -434,6 +434,7 @@ export function CloudStorageModule() {
           </CardHeader>
           <CardContent>
             <div className="space-y-1.5">
+              {/* "All Files" option */}
               <div
                 className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
                   activeCategory === null ? 'bg-amber-50 ring-1 ring-amber-200' : 'hover:bg-muted/60'
@@ -454,6 +455,7 @@ export function CloudStorageModule() {
                 </Badge>
               </div>
 
+              {/* Per-category folders */}
               {summary?.categories.map((cat) => (
                 <div
                   key={cat.category}
@@ -515,6 +517,7 @@ export function CloudStorageModule() {
             </div>
           </CardHeader>
           <CardContent>
+            {/* Empty state */}
             {displayFiles.length === 0 && !isLoading && (
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
@@ -545,6 +548,7 @@ export function CloudStorageModule() {
               </div>
             )}
 
+            {/* File list */}
             {displayFiles.length > 0 && (
               <div className="space-y-1.5 max-h-[520px] overflow-y-auto pr-1">
                 {displayFiles.map((file) => {
@@ -611,6 +615,7 @@ export function CloudStorageModule() {
               </div>
             )}
 
+            {/* Loading skeleton for file list */}
             {isLoading && (
               <div className="space-y-2">
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -674,6 +679,7 @@ export function CloudStorageModule() {
               </div>
             </div>
 
+            {/* Drag & drop zone */}
             <div
               className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
                 isDragging ? 'border-amber-400 bg-amber-50' : 'border-muted-foreground/20 hover:border-muted-foreground/40'
@@ -699,6 +705,7 @@ export function CloudStorageModule() {
               />
             </div>
 
+            {/* Selected files list */}
             {uploadFiles.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">
@@ -732,6 +739,7 @@ export function CloudStorageModule() {
               </div>
             )}
 
+            {/* Upload progress */}
             {isUploading && (
               <div className="space-y-1.5">
                 <div className="flex justify-between text-xs text-muted-foreground">
@@ -818,6 +826,7 @@ export function CloudStorageModule() {
                   </div>
                 </div>
 
+                {/* Image preview */}
                 {previewFile.mimeType.startsWith('image/') && (
                   <div className="rounded-lg overflow-hidden border bg-muted/30 p-2">
                     <img
@@ -828,6 +837,7 @@ export function CloudStorageModule() {
                   </div>
                 )}
 
+                {/* PDF preview */}
                 {previewFile.mimeType === 'application/pdf' && (
                   <div className="rounded-lg border bg-muted/30 p-6 text-center">
                     <FileText className="h-10 w-10 mx-auto mb-2 text-red-400" />
