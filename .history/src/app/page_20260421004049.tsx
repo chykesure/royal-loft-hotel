@@ -35,7 +35,7 @@ const moduleComponents: Record<ModuleKey, React.ComponentType> = {
   rooms: RoomsModule,
   guests: GuestsModule,
   billing: BillingModule,
-  billing: BillingModule,
+    billing: BillingModule,
   invoices: InvoicesModule,
   expenses: () => <div className="p-6 text-muted-foreground">Expenses module — manage via the Expenses page.</div>,
   accounts: AccountsModule,

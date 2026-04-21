@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/auth';
 import { Card, CardContent } from '@/components/ui/card';
+import { RefreshCw, CreditCard, Eye, Trash2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -465,34 +466,14 @@ export function BillingModule() {
               </div>
 
               {/* Record Payment Button */}
-              <div className="flex gap-2">
-                {selectedBill.balanceAmount > 0 && (
-                  <Button className="flex-1 bg-amber-500 hover:bg-amber-600 text-white" onClick={() => setPaymentOpen(true)}>
-                    <CreditCard className="h-4 w-4 mr-2" /> Record Payment
+              {selectedBill.balanceAmount > 0 && (
+                <>
+                  <Separator />
+                  <Button className="bg-amber-500 hover:bg-amber-600 text-white w-full" onClick={() => openPayment(selectedBill)}>
+                    <CreditCard className="h-4 w-4 mr-2" /> Record Payment — {formatCurrency(selectedBill.balanceAmount)} outstanding
                   </Button>
-                )}
-                <Button variant="outline" className="flex-1" onClick={async () => {
-                  try {
-                    const res = await fetch('/api/invoices', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ billId: selectedBill.id, dueDays: 0 }),
-                    });
-                    if (res.ok) {
-                      const invoice = await res.json();
-                      toast.success(`Invoice ${invoice.invoiceNumber} created`);
-                      window.open(`/api/invoices?id=${invoice.id}`, '_blank');
-                    } else {
-                      const err = await res.json();
-                      toast.error(err.error || 'Failed to create invoice');
-                    }
-                  } catch {
-                    toast.error('Failed to create invoice');
-                  }
-                }}>
-                  <FileText className="h-4 w-4 mr-2" /> Generate Invoice
-                </Button>
-              </div>
+                </>
+              )}
 
               {/* Payment History */}
               {selectedBill.payments.length > 0 && (

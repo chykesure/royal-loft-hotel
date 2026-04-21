@@ -18,7 +18,6 @@ export type ModuleKey =
   | 'rooms'
   | 'guests'
   | 'billing'
-  | 'invoices'
   | 'expenses'
   | 'accounts'
   | 'staff'
@@ -40,14 +39,12 @@ export const CONFIGURABLE_ROLES: ConfigurableRole[] = [
   'staff',
 ];
 
-// All module keys
-export const ALL_MODULE_KEYS = [
+const ALL_MODULE_KEYS = [
   'dashboard', 'front_desk', 'reservations', 'rooms', 'guests',
   'billing', 'invoices', 'expenses', 'accounts', 'staff', 'inventory',
   'reports', 'rules', 'security', 'cloud', 'settings', 'developer_tools',
 ] as const;
 
-// Default module access per role (hardcoded fallback if DB has nothing)
 const DEFAULT_ACCESS: Record<ConfigurableRole, ModuleKey[]> = {
   manager: [
     'dashboard', 'front_desk', 'reservations', 'rooms', 'guests',
@@ -152,6 +149,7 @@ export const useRoleAccessStore = create<RoleAccessState>((set, get) => ({
           isLoading: false,
         });
       } else {
+        // Server error — use defaults
         console.warn('Failed to load role access, using defaults');
         set({
           accessMap: Object.fromEntries(
@@ -162,6 +160,7 @@ export const useRoleAccessStore = create<RoleAccessState>((set, get) => ({
         });
       }
     } catch {
+      // Network error — use defaults
       console.warn('Network error loading role access, using defaults');
       set({
         accessMap: Object.fromEntries(
@@ -175,23 +174,30 @@ export const useRoleAccessStore = create<RoleAccessState>((set, get) => ({
 
   // ── Check if a role can see a module ──
   canSee: (role: string, module: string): boolean => {
+    // Developer sees everything
     if (role === 'developer') return true;
 
+    // Super admin sees everything EXCEPT cloud and developer_tools
     if (role === 'super_admin') {
       return module !== 'cloud' && module !== 'developer_tools';
     }
 
+    // For configurable roles, check the access map
     if (CONFIGURABLE_ROLES.includes(role as ConfigurableRole)) {
       const map = get().accessMap;
       return map[role as ConfigurableRole]?.has(module as ModuleKey) || false;
     }
 
+    // Unknown role — deny by default
     return false;
   },
 
   // ── Toggle a module for a role (UI only until saved) ──
   toggleModule: (role: ConfigurableRole, module: ModuleKey) => {
+    // Dashboard cannot be toggled off
     if (module === 'dashboard') return;
+
+    // Blocked modules cannot be granted
     if (BLOCKED_MODULES.includes(module)) return;
 
     const map = cloneMap(get().accessMap);

@@ -7,7 +7,6 @@ export type ModuleKey =
   | 'rooms'
   | 'guests'
   | 'billing'
-  | 'invoices'
   | 'expenses'
   | 'accounts'
   | 'staff'

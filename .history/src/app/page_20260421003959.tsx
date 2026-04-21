@@ -35,9 +35,6 @@ const moduleComponents: Record<ModuleKey, React.ComponentType> = {
   rooms: RoomsModule,
   guests: GuestsModule,
   billing: BillingModule,
-  billing: BillingModule,
-  invoices: InvoicesModule,
-  expenses: () => <div className="p-6 text-muted-foreground">Expenses module — manage via the Expenses page.</div>,
   accounts: AccountsModule,
   staff: StaffPayrollModule,
   inventory: InventoryModule,
@@ -67,7 +64,7 @@ const MODULE_PERM_MAP: Record<ModuleKey, string> = {
   settings: 'settings',
   expenses: 'expenses',
   'developer-tools': 'developer_tools',
-  billing: 'billing',
+    billing: 'billing',
   invoices: 'invoices',
   expenses: 'expenses',
 };
@@ -118,8 +115,8 @@ export default function Home() {
         <div className="text-center">
           <div className="h-16 w-16 rounded-2xl bg-amber-500 flex items-center justify-center mx-auto mb-4 animate-pulse shadow-lg shadow-amber-500/30">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8">
-              <path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z" />
-              <path d="m9 16 .348-.24c1.465-1.013 3.84-1.013 5.304 0L15 16" />
+              <path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/>
+              <path d="m9 16 .348-.24c1.465-1.013 3.84-1.013 5.304 0L15 16"/>
             </svg>
           </div>
           <p className="text-sm text-muted-foreground animate-pulse">Loading Royal Loft...</p>

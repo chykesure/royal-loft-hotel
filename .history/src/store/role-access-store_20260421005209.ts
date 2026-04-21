@@ -41,7 +41,7 @@ export const CONFIGURABLE_ROLES: ConfigurableRole[] = [
 ];
 
 // All module keys
-export const ALL_MODULE_KEYS = [
+const ALL_MODULE_KEYS = [
   'dashboard', 'front_desk', 'reservations', 'rooms', 'guests',
   'billing', 'invoices', 'expenses', 'accounts', 'staff', 'inventory',
   'reports', 'rules', 'security', 'cloud', 'settings', 'developer_tools',

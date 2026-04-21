@@ -41,7 +41,11 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useEffect } from 'react';
-import { FileText, Wallet } from 'lucide-react';
+import {
+  LayoutDashboard, ConciergeBell, CalendarDays, BedDouble, Users,
+  Receipt, FileText, Landmark, UserCog, Package, BarChart3, ScrollText,
+  ShieldCheck, Cloud, Settings, LogOut, Hotel, Wallet, Code,
+} from 'lucide-react';
 
 const menuItems: Array<{ key: ModuleKey; label: string; icon: React.ElementType; permModule: string }> = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permModule: 'dashboard' },
@@ -60,7 +64,6 @@ const menuItems: Array<{ key: ModuleKey; label: string; icon: React.ElementType;
   { key: 'cloud', label: 'Cloud Storage', icon: Cloud, permModule: 'cloud' },
   { key: 'settings', label: 'Settings', icon: Settings, permModule: 'settings' },
   { key: 'developer-tools', label: 'Developer Tools', icon: Code, permModule: 'developer_tools' },
-  { key: 'invoices', label: 'Invoices', icon: FileText, permModule: 'invoices' }
 ];
 
 export function AppSidebar() {
@@ -83,11 +86,11 @@ export function AppSidebar() {
 
   const initials = user?.name
     ? user.name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
     : 'U';
 
   const roleLabel = user?.role?.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase()) || 'Staff';

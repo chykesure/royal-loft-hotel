@@ -60,7 +60,9 @@ const menuItems: Array<{ key: ModuleKey; label: string; icon: React.ElementType;
   { key: 'cloud', label: 'Cloud Storage', icon: Cloud, permModule: 'cloud' },
   { key: 'settings', label: 'Settings', icon: Settings, permModule: 'settings' },
   { key: 'developer-tools', label: 'Developer Tools', icon: Code, permModule: 'developer_tools' },
-  { key: 'invoices', label: 'Invoices', icon: FileText, permModule: 'invoices' }
+  { key: 'billing', label: 'Billing', icon: Receipt, permModule: 'billing' },
+  { key: 'invoices', label: 'Invoices', icon: FileText, permModule: 'invoices' },
+  { key: 'expenses', label: 'Expenses', icon: Wallet, permModule: 'expenses' },
 ];
 
 export function AppSidebar() {
