@@ -650,8 +650,8 @@ export function ReservationsModule() {
             </Button>
           )}
           <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => navigateToFrontDeskTab('walkin')}>
-            <Plus className="h-4 w-4 mr-1" /> New Reservation
-          </Button>
+  <Plus className="h-4 w-4 mr-1" /> New Reservation
+</Button>
         </div>
       </div>
 
@@ -869,14 +869,16 @@ export function ReservationsModule() {
                           key={r.id}
                           type="button"
                           onClick={() => toggleRoomSelection(r.id)}
-                          className={`w-full flex items-center justify-between px-3 py-2.5 text-left text-sm border-b last:border-b-0 transition-colors ${isSelected
+                          className={`w-full flex items-center justify-between px-3 py-2.5 text-left text-sm border-b last:border-b-0 transition-colors ${
+                            isSelected
                               ? 'bg-violet-50 border-l-2 border-l-violet-500'
                               : 'hover:bg-muted/50'
-                            }`}
+                          }`}
                         >
                           <div className="flex items-center gap-2">
-                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isSelected ? 'bg-violet-500 border-violet-500' : 'border-muted-foreground/30'
-                              }`}>
+                            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                              isSelected ? 'bg-violet-500 border-violet-500' : 'border-muted-foreground/30'
+                            }`}>
                               {isSelected && (
                                 <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -970,14 +972,14 @@ export function ReservationsModule() {
                 <Label>Adults</Label>
                 <Select value={form.adults} onValueChange={(v) => setForm({ ...form, adults: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{[1, 2, 3, 4, 5, 6].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
+                  <SelectContent>{[1,2,3,4,5,6].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">
                 <Label>Children</Label>
                 <Select value={form.children} onValueChange={(v) => setForm({ ...form, children: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{[0, 1, 2, 3].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
+                  <SelectContent>{[0,1,2,3].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="grid gap-2">

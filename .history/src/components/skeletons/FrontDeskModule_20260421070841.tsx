@@ -89,7 +89,6 @@ export function FrontDeskModule() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [allRooms, setAllRooms] = useState<Room[]>([]);
-  const { frontDeskTab, setFrontDeskTab } = useAppStore();
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
 
@@ -473,7 +472,6 @@ export function FrontDeskModule() {
           <TabsTrigger value="checkin"><UserCheck className="h-4 w-4 mr-1.5" /> Check-in</TabsTrigger>
           <TabsTrigger value="checkout"><UserMinus className="h-4 w-4 mr-1.5" /> Check-out</TabsTrigger>
           <TabsTrigger value="walkin"><AlertCircle className="h-4 w-4 mr-1.5" /> Walk-in</TabsTrigger>
-          <Tabs value={frontDeskTab} onValueChange={(v) => setFrontDeskTab(v)}></Tabs>
         </TabsList>
 
         {/* ═════════════ CHECK-IN TAB ═══════════════ */}

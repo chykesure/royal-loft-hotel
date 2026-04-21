@@ -63,6 +63,7 @@ export async function GET() {
       Object.entries(MODULE_MODELS).map(async ([key, config]) => {
         let totalCount = 0;
         for (const model of config.models) {
+          // @ts-expect-error - dynamic prisma model access
           const count = await (db[model] as any).count();
           totalCount += count;
         }

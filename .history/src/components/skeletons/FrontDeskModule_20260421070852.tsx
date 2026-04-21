@@ -473,7 +473,6 @@ export function FrontDeskModule() {
           <TabsTrigger value="checkin"><UserCheck className="h-4 w-4 mr-1.5" /> Check-in</TabsTrigger>
           <TabsTrigger value="checkout"><UserMinus className="h-4 w-4 mr-1.5" /> Check-out</TabsTrigger>
           <TabsTrigger value="walkin"><AlertCircle className="h-4 w-4 mr-1.5" /> Walk-in</TabsTrigger>
-          <Tabs value={frontDeskTab} onValueChange={(v) => setFrontDeskTab(v)}></Tabs>
         </TabsList>
 
         {/* ═════════════ CHECK-IN TAB ═══════════════ */}

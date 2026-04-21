@@ -63,6 +63,7 @@ export async function GET() {
       Object.entries(MODULE_MODELS).map(async ([key, config]) => {
         let totalCount = 0;
         for (const model of config.models) {
+          // @ts-expect-error - dynamic prisma model access
           const count = await (db[model] as any).count();
           totalCount += count;
         }
@@ -92,6 +93,7 @@ export async function POST(request: NextRequest) {
     let deletedTotal = 0;
 
     for (const model of config.models) {
+      // @ts-expect-error - dynamic prisma model access
       const result = await (db[model] as any).deleteMany();
       deletedTotal += result.count;
     }
@@ -114,6 +116,7 @@ export async function DELETE() {
     let deletedTotal = 0;
 
     for (const model of uniqueModels) {
+      // @ts-expect-error - dynamic prisma model access
       const result = await (db[model] as any).deleteMany();
       deletedTotal += result.count;
     }
