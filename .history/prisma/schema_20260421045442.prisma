@@ -647,7 +647,6 @@ model Invoice {
   checkOut         DateTime?
   nights           Int       @default(1)
   roomRate         Float     @default(0)
-  numRooms         Int       @default(1)
   roomCharges      Float     @default(0)
   foodCharges      Float     @default(0)
   barCharges       Float     @default(0)

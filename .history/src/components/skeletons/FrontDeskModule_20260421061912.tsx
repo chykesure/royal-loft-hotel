@@ -95,14 +95,11 @@ export function FrontDeskModule() {
   // ── Walk-in Form State ──
   const [walkinGuestMode, setWalkinGuestMode] = useState<'select' | 'new'>('new');
   const [walkinForm, setWalkinForm] = useState({
-    // Guest fields (for new guest)
     firstName: '',
     lastName: '',
     phone: '',
     email: '',
-    // Existing guest
     guestId: '',
-    // Reservation fields
     multiRoom: false,
     selectedRoomIds: [] as string[],
     roomId: '',
@@ -112,7 +109,6 @@ export function FrontDeskModule() {
     children: '0',
     specialRequests: '',
     notes: '',
-    discount: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -164,7 +160,6 @@ export function FrontDeskModule() {
     return checkoutDate < new Date();
   });
 
-  // Unique group leaders (don't double-count multi-room)
   const getUniqueGuests = (list: Reservation[]) => {
     const seen = new Set<string>();
     return list.filter(r => {
@@ -175,7 +170,6 @@ export function FrontDeskModule() {
     });
   };
 
-  // ── Available rooms for walk-in ──
   const availableRooms = allRooms.filter(r => r.status === 'available');
 
   // ── Walk-in Helpers ──
@@ -189,30 +183,6 @@ export function FrontDeskModule() {
   };
 
   const getEstimatedTotal = () => {
-    if (!walkinForm.checkIn || !walkinForm.checkOut) return 0;
-    const nights = Math.ceil((new Date(walkinForm.checkOut).getTime() - new Date(walkinForm.checkIn).getTime()) / (1000 * 60 * 60 * 24));
-    if (nights <= 0) return 0;
-
-    let total = 0;
-    if (walkinForm.multiRoom) {
-      total = walkinForm.selectedRoomIds.reduce((sum, roomId) => {
-        const room = allRooms.find(r => r.id === roomId);
-        return sum + (room ? room.roomType.baseRate * nights : 0);
-      }, 0);
-    } else {
-      const room = allRooms.find(r => r.id === walkinForm.roomId);
-      total = room ? room.roomType.baseRate * nights : 0;
-    }
-
-    const discount = parseFloat(walkinForm.discount) || 0;
-    return Math.max(0, total - discount);
-  };
-
-  const getDiscountAmount = () => {
-    return parseFloat(walkinForm.discount) || 0;
-  };
-
-  const getSubtotalBeforeDiscount = () => {
     if (!walkinForm.checkIn || !walkinForm.checkOut) return 0;
     const nights = Math.ceil((new Date(walkinForm.checkOut).getTime() - new Date(walkinForm.checkIn).getTime()) / (1000 * 60 * 60 * 24));
     if (nights <= 0) return 0;
@@ -266,7 +236,6 @@ export function FrontDeskModule() {
 
     setIsSubmitting(true);
     try {
-      // If new guest, create them first
       let guestId = walkinForm.guestId;
       if (walkinGuestMode === 'new') {
         const guestRes = await fetch('/api/guests', {
@@ -290,8 +259,6 @@ export function FrontDeskModule() {
         }
       }
 
-      // Create reservation(s) + bill
-      const discountAmount = parseFloat(walkinForm.discount) || 0;
       const reservationPayload: Record<string, unknown> = {
         guestId,
         checkIn: walkinForm.checkIn,
@@ -301,7 +268,6 @@ export function FrontDeskModule() {
         source: 'walk_in',
         specialRequests: walkinForm.specialRequests || undefined,
         notes: walkinForm.notes || undefined,
-        discountAmount,
       };
 
       if (walkinForm.multiRoom) {
@@ -323,12 +289,11 @@ export function FrontDeskModule() {
         } else {
           toast.success('Walk-in guest registered & checked in! Bill created for invoice.');
         }
-        // Reset form
         setWalkinForm({
           firstName: '', lastName: '', phone: '', email: '', guestId: '',
           multiRoom: false, selectedRoomIds: [], roomId: '',
           checkIn: '', checkOut: '', adults: '1', children: '0',
-          specialRequests: '', notes: '', discount: '',
+          specialRequests: '', notes: '',
         });
         fetchData();
       } else {
@@ -730,18 +695,6 @@ export function FrontDeskModule() {
                   <Label className="text-xs">Special Requests</Label>
                   <Textarea placeholder="Any special requests..." className="min-h-[60px] text-sm" value={walkinForm.specialRequests} onChange={(e) => setWalkinForm({ ...walkinForm, specialRequests: e.target.value })} />
                 </div>
-
-                <div className="grid gap-1.5">
-                  <Label className="text-xs">Discount (&#8358;)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    className="h-9"
-                    value={walkinForm.discount}
-                    onChange={(e) => setWalkinForm({ ...walkinForm, discount: e.target.value })}
-                  />
-                </div>
               </CardContent>
             </Card>
 
@@ -922,17 +875,7 @@ export function FrontDeskModule() {
                         })}
                       </div>
                     )}
-                    {getDiscountAmount() > 0 && (
-                      <div className="flex justify-between text-xs text-emerald-600 mt-1">
-                        <span>Discount</span>
-                        <span>-{formatCurrency(getDiscountAmount())}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-xs mt-1 pt-1 border-t border-amber-300">
-                      <span className="font-medium text-amber-800">Total</span>
-                      <span className="font-bold text-amber-800">{formatCurrency(getEstimatedTotal())}</span>
-                    </div>
-                    <p className="text-[10px] text-amber-500 mt-1">A bill will be auto-created.</p>
+                    <p className="text-[10px] text-amber-500 mt-1">+ 7.5% VAT will be applied. A bill will be auto-created.</p>
                   </div>
                 )}
 

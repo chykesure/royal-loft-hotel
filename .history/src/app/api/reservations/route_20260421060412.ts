@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // ── MULTI-ROOM BOOKING: roomIds array provided ──
     if (body.roomIds && Array.isArray(body.roomIds) && body.roomIds.length > 0) {
-      const { guestId, roomIds, checkIn, checkOut, adults, children, source, specialRequests, notes, discountAmount } = body;
+      const { guestId, roomIds, checkIn, checkOut, adults, children, source, specialRequests, notes } = body;
 
       if (!guestId || !checkIn || !checkOut) {
         return NextResponse.json({ error: 'Guest, rooms, and dates are required' }, { status: 400 });
@@ -108,16 +108,18 @@ export async function POST(request: NextRequest) {
       const grandTotal = createdReservations.reduce((sum: number, r: { totalAmount: number }) => sum + r.totalAmount, 0);
 
       // Auto-create a bill linked to the first reservation in the group
+      // The invoice system will detect the groupCode and pull ALL rooms
       const totalRoomCharges = grandTotal;
-      const discount = Number(discountAmount) || 0;
-      const billTotal = Math.max(0, Math.round(totalRoomCharges - discount));
+      const subTotal = totalRoomCharges;
+      const taxAmount = Math.round(subTotal * 0.075);
+      const billTotal = Math.round(subTotal + taxAmount);
 
       const bill = await db.bill.create({
         data: {
           reservationId: createdReservations[0].id,
           guestId,
           roomCharges: totalRoomCharges,
-          discountAmount: discount,
+          taxAmount,
           totalAmount: billTotal,
           balanceAmount: billTotal,
           status: 'open',
@@ -134,7 +136,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── SINGLE-ROOM BOOKING: roomId string provided (backward compatible) ──
-    const { guestId, roomId, checkIn, checkOut, adults, children, source, specialRequests, notes, discountAmount } = body;
+    const { guestId, roomId, checkIn, checkOut, adults, children, source, specialRequests, notes } = body;
 
     if (!guestId || !roomId || !checkIn || !checkOut) {
       return NextResponse.json({ error: 'Guest, room, and dates are required' }, { status: 400 });
@@ -183,15 +185,16 @@ export async function POST(request: NextRequest) {
     });
 
     // Auto-create a bill for this reservation
-    const discount = Number(discountAmount) || 0;
-    const billTotal = Math.max(0, Math.round(totalAmount - discount));
+    const subTotal = totalAmount;
+    const taxAmount = Math.round(subTotal * 0.075);
+    const billTotal = Math.round(subTotal + taxAmount);
 
     await db.bill.create({
       data: {
         reservationId: reservation.id,
         guestId,
         roomCharges: totalAmount,
-        discountAmount: discount,
+        taxAmount,
         totalAmount: billTotal,
         balanceAmount: billTotal,
         status: 'open',
@@ -237,17 +240,20 @@ export async function PUT(request: NextRequest) {
         updateData.checkedOutAt = new Date();
       }
 
+      // Update all reservations in the group
       await db.reservation.updateMany({
         where: { groupCode, status: { not: 'cancelled' } },
         data: updateData,
       });
 
+      // Update room statuses for all rooms in the group
       const roomIds = groupReservations.map((r: { roomId: string }) => r.roomId);
       if (status === 'checked_in') {
         await db.room.updateMany({ where: { id: { in: roomIds } }, data: { status: 'occupied' } });
       } else if (status === 'checked_out') {
         await db.room.updateMany({ where: { id: { in: roomIds } }, data: { status: 'housekeeping' } });
       } else if (status === 'cancelled' || status === 'no_show') {
+        // Only free rooms that have no other active reservations
         for (const roomId of roomIds) {
           const hasOtherActive = await db.reservation.count({
             where: { roomId, status: { in: ['confirmed', 'checked_in'] } },
@@ -258,6 +264,7 @@ export async function PUT(request: NextRequest) {
         }
       }
 
+      // Return updated reservations
       const updatedReservations = await db.reservation.findMany({
         where: { groupCode },
         include: {
@@ -272,7 +279,7 @@ export async function PUT(request: NextRequest) {
       });
     }
 
-    // ── SINGLE RESERVATION UPDATE ──
+    // ── SINGLE RESERVATION UPDATE (backward compatible) ──
     if (!id) {
       return NextResponse.json({ error: 'Reservation ID or group code is required' }, { status: 400 });
     }
@@ -302,6 +309,7 @@ export async function PUT(request: NextRequest) {
       },
     });
 
+    // Update room status based on reservation
     if (status === 'checked_in') {
       await db.room.update({ where: { id: reservation.roomId }, data: { status: 'occupied' } });
     } else if (status === 'checked_out') {
@@ -327,7 +335,7 @@ export async function DELETE(request: NextRequest) {
     const body = await request.json();
     const { id, groupCode } = body;
 
-    // ── GROUP DELETE ──
+    // ── GROUP DELETE: Delete all reservations with same groupCode ──
     if (groupCode && !id) {
       const groupReservations = await db.reservation.findMany({
         where: { groupCode },
@@ -338,6 +346,7 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ error: 'No reservations found in this group' }, { status: 404 });
       }
 
+      // Delete bills and payments for each reservation
       for (const res of groupReservations) {
         const bill = await db.bill.findUnique({ where: { reservationId: res.id } });
         if (bill) {
@@ -348,6 +357,7 @@ export async function DELETE(request: NextRequest) {
 
       await db.reservation.deleteMany({ where: { groupCode } });
 
+      // Free up rooms
       const roomIds = groupReservations.map((r: { roomId: string }) => r.roomId);
       for (const roomId of roomIds) {
         const hasOtherActive = await db.reservation.count({
@@ -361,7 +371,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: true, deletedCount: groupReservations.length });
     }
 
-    // ── SINGLE DELETE ──
+    // ── SINGLE DELETE (backward compatible) ──
     if (!id) {
       return NextResponse.json({ error: 'Reservation ID or group code is required' }, { status: 400 });
     }
@@ -375,6 +385,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Reservation not found' }, { status: 404 });
     }
 
+    // Delete associated payments and bill first
     const bill = await db.bill.findUnique({ where: { reservationId: id } });
     if (bill) {
       await db.payment.deleteMany({ where: { billId: bill.id } });
@@ -383,6 +394,7 @@ export async function DELETE(request: NextRequest) {
 
     await db.reservation.delete({ where: { id } });
 
+    // Free up the room if no other active reservations
     const hasOtherActiveRes = await db.reservation.count({
       where: { roomId: reservation.roomId, status: { in: ['confirmed', 'checked_in'] } },
     });

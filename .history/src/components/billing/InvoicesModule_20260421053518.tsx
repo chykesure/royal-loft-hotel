@@ -57,7 +57,6 @@ interface Invoice {
   roomNumber?: string | null;
   roomType?: string | null;
   roomDetails?: string | null;
-  numRooms?: number;
   checkIn?: string | null;
   checkOut?: string | null;
   nights: number;
@@ -148,7 +147,7 @@ function InvoicePrintView({ invoice, printRef }: { invoice: Invoice; printRef: R
     });
   }
 
-  // Other charges — ONLY show if they actually have values (no hardcoded zeros)
+  // Other charges
   if (invoice.foodCharges > 0) lineItems.push({ label: 'Food & Beverage', amount: invoice.foodCharges });
   if (invoice.barCharges > 0) lineItems.push({ label: 'Bar Services', amount: invoice.barCharges });
   if (invoice.spaCharges > 0) lineItems.push({ label: 'Spa & Wellness', amount: invoice.spaCharges });
@@ -204,12 +203,9 @@ function InvoicePrintView({ invoice, printRef }: { invoice: Invoice; printRef: R
             {invoice.groupCode && (
               <p style={{ fontSize: '12px', color: '#7c3aed', margin: '2px 0', fontWeight: 600 }}>
                 Group Booking: <span style={{ fontFamily: 'monospace' }}>{invoice.groupCode}</span>
-                <span style={{ fontWeight: 400, color: '#4b5563' }}> ({invoice.numRooms || roomDetails?.length || 1} room{(invoice.numRooms || roomDetails?.length || 1) > 1 ? 's' : ''})</span>
-              </p>
-            )}
-            {!invoice.groupCode && (invoice.numRooms && invoice.numRooms > 1) && (
-              <p style={{ fontSize: '12px', color: '#7c3aed', margin: '2px 0', fontWeight: 600 }}>
-                Multi-Room Booking: <span style={{ fontWeight: 700 }}>{invoice.numRooms} room{invoice.numRooms > 1 ? 's' : ''}</span>
+                {isMultiRoom && roomDetails && (
+                  <span style={{ fontWeight: 400, color: '#4b5563' }}> ({roomDetails.length} rooms)</span>
+                )}
               </p>
             )}
             {invoice.confirmationCode && !invoice.groupCode && (

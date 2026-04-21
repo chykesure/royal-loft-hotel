@@ -77,10 +77,10 @@ export async function POST(request: NextRequest) {
     const hotelPhone = getSetting('phone') || '';
     const hotelEmail = getSetting('email') || '';
     const hotelWebsite = getSetting('website') || '';
+    const taxRate = getNumSetting('tax_rate', 7.5);
 
     // ── Check for multi-room (group) booking ──
     let groupCode: string | null = null;
-    let numRooms = 1;
     let groupReservations: Array<{
       id: string;
       confirmationCode: string;
@@ -92,7 +92,6 @@ export async function POST(request: NextRequest) {
     }> = [];
     let roomDetailsJson: string | null = null;
     let isMultiRoom = false;
-    let calculatedRoomCharges = bill.roomCharges;
 
     if (bill.reservation?.groupCode) {
       groupCode = bill.reservation.groupCode;
@@ -104,29 +103,22 @@ export async function POST(request: NextRequest) {
       if (allGroupRes.length > 1) {
         isMultiRoom = true;
         groupReservations = allGroupRes;
-        numRooms = allGroupRes.length;
 
-        let totalRoomCharges = 0;
+        // Build roomDetails JSON for the invoice
         const roomDetailsArr = allGroupRes.map((r) => {
           const checkInD = new Date(r.checkIn);
           const checkOutD = new Date(r.checkOut);
           const nights = Math.max(1, Math.round((checkOutD.getTime() - checkInD.getTime()) / (1000 * 60 * 60 * 24)));
-          const roomTotal = r.roomRate * nights;
-          totalRoomCharges += roomTotal;
           return {
             roomNumber: r.room.roomNumber,
             roomType: r.room.roomType.name,
-            roomRate: r.roomRate,
+            roomRate: r.room.roomType.baseRate,
             nights,
-            total: roomTotal,
+            total: r.roomRate * nights,
             confirmationCode: r.confirmationCode,
           };
         });
         roomDetailsJson = JSON.stringify(roomDetailsArr);
-
-        if (totalRoomCharges > bill.roomCharges) {
-          calculatedRoomCharges = totalRoomCharges;
-        }
       }
     }
 
@@ -145,8 +137,8 @@ export async function POST(request: NextRequest) {
     if (bill.guest.country) addressParts.push(bill.guest.country);
     const guestAddress = addressParts.filter(Boolean).join(', ');
 
-    // Calculate subtotal (charges before discount) — no VAT
-    const subtotal = calculatedRoomCharges + bill.foodCharges + bill.barCharges + bill.spaCharges + bill.laundryCharges + bill.otherCharges;
+    // Calculate subtotal (charges before tax and discount)
+    const subtotal = bill.roomCharges + bill.foodCharges + bill.barCharges + bill.spaCharges + bill.laundryCharges + bill.otherCharges;
 
     // Determine the last payment method used
     const lastPayment = bill.payments.length > 0 ? bill.payments[0] : null;
@@ -170,14 +162,12 @@ export async function POST(request: NextRequest) {
     let roomTypeDisplay: string | null = bill.reservation?.room?.roomType?.name || null;
     let roomRateDisplay: number = bill.reservation?.roomRate || 0;
     let confirmationCodeDisplay: string | null = bill.reservation?.confirmationCode || null;
-    let numRoomsDisplay: number = 1;
 
     if (isMultiRoom && groupReservations.length > 0) {
       roomNumberDisplay = `${groupReservations.length} Rooms`;
       roomTypeDisplay = groupReservations.map((r) => r.room.roomNumber).join(', ');
       roomRateDisplay = groupReservations.reduce((sum, r) => sum + r.roomRate, 0);
       confirmationCodeDisplay = groupCode;
-      numRoomsDisplay = groupReservations.length;
     }
 
     const invoice = await db.invoice.create({
@@ -204,18 +194,17 @@ export async function POST(request: NextRequest) {
         checkOut: bill.reservation?.checkOut || null,
         nights,
         roomRate: roomRateDisplay,
-        numRooms: numRoomsDisplay,
-        roomCharges: calculatedRoomCharges,
+        roomCharges: bill.roomCharges,
         foodCharges: bill.foodCharges,
         barCharges: bill.barCharges,
         spaCharges: bill.spaCharges,
         laundryCharges: bill.laundryCharges,
         otherCharges: bill.otherCharges,
         subtotal,
-        taxRate: 0,
-        taxAmount: 0,
-        discountAmount: bill.discountAmount || 0,
-        totalAmount: calculatedRoomCharges + bill.foodCharges + bill.barCharges + bill.spaCharges + bill.laundryCharges + bill.otherCharges - (bill.discountAmount || 0),
+        taxRate,
+        taxAmount: bill.taxAmount,
+        discountAmount: bill.discountAmount,
+        totalAmount: bill.totalAmount,
         paidAmount: bill.paidAmount,
         balanceAmount: bill.balanceAmount,
         paymentMethod: bill.paymentMethod || lastPayment?.paymentMethod || null,

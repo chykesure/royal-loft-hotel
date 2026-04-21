@@ -624,57 +624,54 @@ model StaffAttendance {
 // ============ INVOICES ============
 
 model Invoice {
-  id               String    @id @default(cuid())
-  invoiceNumber    String    @unique
-  billId           String
-  reservationId    String?
-  guestId          String
-  guestName        String
-  guestPhone       String
-  guestEmail       String?
-  guestAddress     String?
-  hotelName        String
-  hotelAddress     String?
-  hotelPhone       String?
-  hotelEmail       String?
-  hotelWebsite     String?
+  id              String    @id @default(cuid())
+  invoiceNumber   String    @unique
+  billId          String
+  reservationId   String?
+  guestId         String
+  guestName       String
+  guestPhone      String
+  guestEmail      String?
+  guestAddress    String?
+  hotelName       String
+  hotelAddress    String?
+  hotelPhone      String?
+  hotelEmail      String?
+  hotelWebsite    String?
   confirmationCode String?
-  groupCode        String?
-  roomNumber       String?
-  roomType         String?
-  roomDetails      String?
-  checkIn          DateTime?
-  checkOut         DateTime?
-  nights           Int       @default(1)
-  roomRate         Float     @default(0)
-  numRooms         Int       @default(1)
-  roomCharges      Float     @default(0)
-  foodCharges      Float     @default(0)
-  barCharges       Float     @default(0)
-  spaCharges       Float     @default(0)
-  laundryCharges   Float     @default(0)
-  otherCharges     Float     @default(0)
-  subtotal         Float
-  taxRate          Float     @default(7.5)
-  taxAmount        Float     @default(0)
-  discountAmount   Float     @default(0)
-  totalAmount      Float
-  paidAmount       Float     @default(0)
-  balanceAmount    Float     @default(0)
-  paymentMethod    String?
-  paymentRef       String?
-  status           String    @default("sent")
-  notes            String?
-  issuedAt         DateTime  @default(now())
-  dueAt            DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  bill             Bill      @relation(fields: [billId], references: [id], onDelete: Cascade)
+  roomNumber      String?
+  roomType        String?
+  checkIn         DateTime?
+  checkOut        DateTime?
+  nights          Int       @default(1)
+  roomRate        Float     @default(0)
+  roomCharges     Float     @default(0)
+  foodCharges     Float     @default(0)
+  barCharges      Float     @default(0)
+  spaCharges      Float     @default(0)
+  laundryCharges  Float     @default(0)
+  otherCharges    Float     @default(0)
+  subtotal        Float
+  taxRate         Float     @default(7.5)
+  taxAmount       Float     @default(0)
+  discountAmount  Float     @default(0)
+  totalAmount     Float
+  paidAmount      Float     @default(0)
+  balanceAmount   Float     @default(0)
+  paymentMethod   String?
+  paymentRef      String?
+  status          String    @default("sent")
+  notes           String?
+  issuedAt        DateTime  @default(now())
+  dueAt           DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  bill Bill @relation(fields: [billId], references: [id], onDelete: Cascade)
 
   @@index([billId])
   @@index([guestId])
   @@index([issuedAt])
-  @@index([groupCode])
 }
 
 // ============ HOTEL SETTINGS ============

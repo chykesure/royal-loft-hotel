@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
     const hotelPhone = getSetting('phone') || '';
     const hotelEmail = getSetting('email') || '';
     const hotelWebsite = getSetting('website') || '';
+    const taxRate = getNumSetting('tax_rate', 7.5);
 
     // ── Check for multi-room (group) booking ──
     let groupCode: string | null = null;
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
         groupReservations = allGroupRes;
         numRooms = allGroupRes.length;
 
+        // Build roomDetails JSON for the invoice and recalculate total room charges
         let totalRoomCharges = 0;
         const roomDetailsArr = allGroupRes.map((r) => {
           const checkInD = new Date(r.checkIn);
@@ -124,6 +126,7 @@ export async function POST(request: NextRequest) {
         });
         roomDetailsJson = JSON.stringify(roomDetailsArr);
 
+        // Use the recalculated room charges (sum of all rooms) instead of the bill's single-room value
         if (totalRoomCharges > bill.roomCharges) {
           calculatedRoomCharges = totalRoomCharges;
         }
@@ -145,7 +148,7 @@ export async function POST(request: NextRequest) {
     if (bill.guest.country) addressParts.push(bill.guest.country);
     const guestAddress = addressParts.filter(Boolean).join(', ');
 
-    // Calculate subtotal (charges before discount) — no VAT
+    // Calculate subtotal (charges before tax and discount) — use recalculated room charges for multi-room
     const subtotal = calculatedRoomCharges + bill.foodCharges + bill.barCharges + bill.spaCharges + bill.laundryCharges + bill.otherCharges;
 
     // Determine the last payment method used
@@ -212,10 +215,10 @@ export async function POST(request: NextRequest) {
         laundryCharges: bill.laundryCharges,
         otherCharges: bill.otherCharges,
         subtotal,
-        taxRate: 0,
-        taxAmount: 0,
-        discountAmount: bill.discountAmount || 0,
-        totalAmount: calculatedRoomCharges + bill.foodCharges + bill.barCharges + bill.spaCharges + bill.laundryCharges + bill.otherCharges - (bill.discountAmount || 0),
+        taxRate,
+        taxAmount: bill.taxAmount,
+        discountAmount: bill.discountAmount,
+        totalAmount: calculatedRoomCharges + bill.foodCharges + bill.barCharges + bill.spaCharges + bill.laundryCharges + bill.otherCharges + bill.taxAmount - bill.discountAmount,
         paidAmount: bill.paidAmount,
         balanceAmount: bill.balanceAmount,
         paymentMethod: bill.paymentMethod || lastPayment?.paymentMethod || null,
