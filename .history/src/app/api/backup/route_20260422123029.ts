@@ -130,10 +130,12 @@ export async function POST(request: NextRequest) {
 
     const restoreTable = async (name: string, records: unknown[]) => {
       if (!records || records.length === 0) return;
+      // @ts-expect-error dynamic model access
       const model = db[name.charAt(0).toLowerCase() + name.slice(1)];
       if (model && model.createMany) {
         for (const record of records) {
           try {
+            // @ts-expect-error dynamic create
             await model.create({ data: record });
             totalRecordsRestored++;
           } catch (e) {

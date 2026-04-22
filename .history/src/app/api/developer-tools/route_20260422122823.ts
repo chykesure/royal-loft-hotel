@@ -75,6 +75,7 @@ export async function GET(request: NextRequest) {
         const failedModels: string[] = [];
         for (const model of config.models) {
           try {
+            // @ts-expect-error - dynamic prisma model access
             const count = await (db[model] as any).count();
             totalCount += count;
             workingModels.push(model);
@@ -122,6 +123,7 @@ export async function POST(request: NextRequest) {
 
     for (const model of config.models) {
       try {
+        // @ts-expect-error - dynamic prisma model access
         const result = await (db[model] as any).deleteMany();
         deletedTotal += result.count;
       } catch {

@@ -1,32 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyPassword, generateToken } from '@/lib/auth';
-import { seedDatabase } from '@/lib/seed';
-
-// Track whether seed has been triggered this process
-let loginSeedTriggered = false;
-
-// Account lockout configuration
-const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 export async function POST(request: NextRequest) {
   try {
-    // Auto-seed if database is empty (only once per process)
-    if (!loginSeedTriggered) {
-      const userCount = await db.user.count().catch(() => 0);
-      if (userCount === 0) {
-        console.log('[LOGIN] Database empty — triggering seed...');
-        loginSeedTriggered = true;
-        try {
-          await seedDatabase();
-          console.log('[LOGIN] Seed completed successfully');
-        } catch (seedError: unknown) {
-          console.error('[LOGIN] Seed failed:', seedError);
-        }
-      }
-    }
-
     const body = await request.json();
     const { email, password } = body;
 
@@ -49,7 +26,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if account is disabled
     if (!user.isActive) {
       return NextResponse.json(
         { error: 'Account is disabled. Contact administrator.' },
@@ -57,48 +33,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if account is locked due to too many failed attempts
-    const recentFailedAlerts = await db.securityAlert.findMany({
-      where: {
-        type: 'failed_login',
-        userId: user.id,
-        createdAt: { gte: new Date(Date.now() - LOCKOUT_DURATION_MS) },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (recentFailedAlerts.length >= MAX_FAILED_ATTEMPTS) {
-      const lastAttempt = recentFailedAlerts[0];
-      const lockUntil = new Date(lastAttempt.createdAt.getTime() + LOCKOUT_DURATION_MS);
-      const now = new Date();
-
-      if (now < lockUntil) {
-        const minutesLeft = Math.ceil((lockUntil.getTime() - now.getTime()) / 60000);
-        return NextResponse.json(
-          {
-            error: `Account is temporarily locked due to too many failed attempts. Try again in ${minutesLeft} minute(s).`,
-            locked: true,
-            lockUntil: lockUntil.toISOString(),
-          },
-          { status: 423 }
-        );
-      }
-    }
-
     const isValid = await verifyPassword(password, user.password);
     if (!isValid) {
-      const clientIp =
-        request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-        request.headers.get('x-real-ip') ||
-        undefined;
-
       await db.securityAlert.create({
         data: {
           type: 'failed_login',
-          severity: recentFailedAlerts.length >= MAX_FAILED_ATTEMPTS - 1 ? 'high' : 'low',
+          severity: 'low',
           userId: user.id,
-          ipAddress: clientIp,
-          details: `Failed login attempt for ${email}. Total recent failures: ${recentFailedAlerts.length + 1}/${MAX_FAILED_ATTEMPTS}`,
+          ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
+          details: `Failed login attempt for ${email}`,
         },
       });
 
@@ -106,18 +49,6 @@ export async function POST(request: NextRequest) {
         { error: 'Invalid email or password' },
         { status: 401 }
       );
-    }
-
-    // Successful login — clear any existing failed login alerts
-    if (recentFailedAlerts.length > 0) {
-      await db.securityAlert.updateMany({
-        where: {
-          type: 'failed_login',
-          userId: user.id,
-          isResolved: false,
-        },
-        data: { isResolved: true, resolvedAt: new Date() },
-      });
     }
 
     const token = generateToken();
@@ -129,10 +60,6 @@ export async function POST(request: NextRequest) {
         token,
         expiresAt,
         device: request.headers.get('user-agent') || undefined,
-        ipAddress:
-          request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-          request.headers.get('x-real-ip') ||
-          undefined,
       },
     });
 
@@ -148,10 +75,7 @@ export async function POST(request: NextRequest) {
         action: 'login',
         module: 'security',
         details: JSON.stringify({ action: 'user_login', email: user.email }),
-        ipAddress:
-          request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-          request.headers.get('x-real-ip') ||
-          undefined,
+        ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
         userAgent: request.headers.get('user-agent') || undefined,
       },
     });
@@ -195,10 +119,7 @@ export async function DELETE(request: NextRequest) {
           action: 'logout',
           module: 'security',
           details: JSON.stringify({ action: 'user_logout' }),
-          ipAddress:
-            request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-            request.headers.get('x-real-ip') ||
-            undefined,
+          ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined,
         },
       });
     }

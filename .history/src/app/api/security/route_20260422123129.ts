@@ -51,6 +51,9 @@ export async function GET(request: NextRequest) {
     if (section === 'alerts') {
       const alerts = await db.securityAlert.findMany({
         orderBy: { createdAt: 'desc' },
+        include: {
+          user: { select: { name: true, email: true } },
+        },
       });
       return NextResponse.json(alerts);
     }
@@ -74,10 +77,7 @@ export async function GET(request: NextRequest) {
 
       // Get or create all permissions
       const existingPerms = await db.permission.findMany();
-      const permMap = new Map<string, boolean>();
-      for (const p of existingPerms) {
-        permMap.set(`${p.module}-${p.action}`, true);
-      }
+      const permMap = new Map(existingPerms.map((p) => `${p.module}-${p.action}`));
 
       for (const mod of allModules) {
         for (const act of allActions) {
