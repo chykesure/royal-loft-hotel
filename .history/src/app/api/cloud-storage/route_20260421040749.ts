@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { cookies } from 'next/headers';
-import { uploadCloudFile, deleteCloudFile, getCloudFileUrl } from '@/lib/supabase-storage';
+import fs from 'fs';
+import path from 'path';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_MIME_TYPES = [
-  // Images
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/bmp', 'image/tiff',
-  // Documents
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -17,11 +15,8 @@ const ALLOWED_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  // Text
   'text/plain', 'text/csv', 'text/html', 'text/css', 'text/javascript', 'application/json',
-  // Archives
   'application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed', 'application/gzip',
-  // Other common hotel docs
   'application/xml',
 ];
 
@@ -30,14 +25,12 @@ const ALLOWED_CATEGORIES = [
   'invoices', 'policies', 'reports', 'other',
 ];
 
-// Role hierarchy for access level checking (higher index = more access)
 const ROLE_HIERARCHY = ['staff', 'housekeeping', 'auditor', 'front_desk', 'accountant', 'manager', 'super_admin', 'developer'];
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
-async function authenticate() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get('auth_token')?.value;
+async function authenticate(request: NextRequest) {
+  const token = request.cookies.get('auth_token')?.value;
   if (!token) return null;
 
   const session = await db.session.findFirst({
@@ -54,14 +47,12 @@ async function authenticate() {
 }
 
 function canAccessFile(userRole: string, fileAccessLevel: string): boolean {
-  // Map access levels to minimum required role hierarchy index
   const ACCESS_LEVEL_MIN_ROLE: Record<string, number> = {
-    'all_staff': 0,    // Any staff member can see
-    'accountant': 5,   // Accountant and above
-    'manager': 5,      // Manager and above
-    'admin': 6,        // Super admin and developer only
+    'all_staff': 0,
+    'accountant': 5,
+    'manager': 5,
+    'admin': 6,
   };
-
   const userLevel = ROLE_HIERARCHY.indexOf(userRole);
   const requiredLevel = ACCESS_LEVEL_MIN_ROLE[fileAccessLevel] ?? 6;
   return userLevel >= requiredLevel;
@@ -71,7 +62,7 @@ function canAccessFile(userRole: string, fileAccessLevel: string): boolean {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await authenticate();
+    const user = await authenticate(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -89,10 +80,8 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Filter by access level based on user role
     const accessibleFiles = files.filter((f) => canAccessFile(user.role, f.accessLevel));
 
-    // Build summary (only from accessible files)
     const totalFiles = accessibleFiles.length;
     const totalSize = accessibleFiles.reduce((sum, f) => sum + f.size, 0);
 
@@ -125,7 +114,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await authenticate();
+    const user = await authenticate(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -139,7 +128,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         { error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024} MB.` },
@@ -147,55 +135,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate MIME type
     if (!ALLOWED_MIME_TYPES.includes(file.type)) {
       return NextResponse.json(
-        { error: `File type "${file.type || 'unknown'}" is not allowed. Allowed types: images, PDFs, Office documents, text files, and common archives.` },
+        { error: `File type "${file.type || 'unknown'}" is not allowed.` },
         { status: 400 },
       );
     }
 
-    // Validate category
     const finalCategory = ALLOWED_CATEGORIES.includes(category) ? category : 'other';
-
-    // Validate access level
     const validAccessLevels = ['admin', 'manager', 'accountant', 'all_staff'];
     const finalAccessLevel = validAccessLevels.includes(accessLevel) ? accessLevel : 'admin';
 
-    // Generate unique filename
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 8);
-    const ext = file.name.split('.').pop() || '';
-    const baseName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 60);
-    const filename = `${baseName}_${timestamp}_${randomStr}.${ext}`;
+    const ext = path.extname(file.name) || '';
+    const baseName = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 60);
+    const filename = `${baseName}_${timestamp}_${randomStr}${ext}`;
 
-    // Upload to Supabase Storage
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads', finalCategory);
+    fs.mkdirSync(uploadDir, { recursive: true });
+
+    const filePath = path.join(uploadDir, filename);
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    fs.writeFileSync(filePath, buffer);
 
-    const storagePath = await uploadCloudFile(finalCategory, filename, buffer, file.type);
-    if (!storagePath) {
-      return NextResponse.json(
-        { error: 'Failed to upload file to cloud storage. Please ensure SUPABASE_SERVICE_ROLE_KEY is configured.' },
-        { status: 500 },
-      );
-    }
-
-    // Check for existing file with same original name in same category (versioning)
     const existingFile = await db.cloudFile.findFirst({
       where: { originalName: file.name, category: finalCategory },
       orderBy: { version: 'desc' },
     });
     const nextVersion = existingFile ? (existingFile.version || 0) + 1 : 1;
 
-    // Save to database
     const record = await db.cloudFile.create({
       data: {
         name: filename,
         originalName: file.name,
         mimeType: file.type,
         size: buffer.length,
-        path: storagePath,
+        path: `uploads/${finalCategory}/${filename}`,
         category: finalCategory,
         accessLevel: finalAccessLevel,
         uploadedBy: user.id,
@@ -214,12 +191,11 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const user = await authenticate();
+    const user = await authenticate(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Only manager, super_admin, and developer can delete files
     if (!['manager', 'super_admin', 'developer'].includes(user.role)) {
       return NextResponse.json({ error: 'Insufficient permissions to delete files' }, { status: 403 });
     }
@@ -236,12 +212,15 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'File not found' }, { status: 404 });
     }
 
-    // Delete from Supabase Storage
-    if (fileRecord.path) {
-      await deleteCloudFile(fileRecord.path);
+    const filePath = path.join(process.cwd(), 'public', fileRecord.path);
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch {
+      // File may already be deleted from disk
     }
 
-    // Delete from database
     await db.cloudFile.delete({ where: { id } });
 
     return NextResponse.json({ success: true });

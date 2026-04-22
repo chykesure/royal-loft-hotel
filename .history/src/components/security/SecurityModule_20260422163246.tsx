@@ -31,7 +31,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   Search, Plus, RefreshCw, Shield, CheckCircle, AlertTriangle, Users,
   FileText, Pencil, Trash2, Save, KeyRound, Lock, Eye, RotateCcw, Code,
-  Database, HardDrive, Upload, Download, Clock,
+  Database, HardDrive, Upload, Download, Clock, Database, Download, Upload,
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/auth';
 import { useAuthStore } from '@/store/auth-store';
@@ -79,7 +79,6 @@ interface BackupRecord {
 
 const roleColors: Record<string, string> = {
   super_admin: 'bg-red-100 text-red-700',
-  developer: 'bg-orange-100 text-orange-700',
   manager: 'bg-purple-100 text-purple-700',
   front_desk: 'bg-sky-100 text-sky-700',
   housekeeping: 'bg-teal-100 text-teal-700',
@@ -129,9 +128,8 @@ const ACTION_LABELS: Record<string, string> = {
   delete: 'D',
 };
 
+// Permission state: role.id -> module -> action -> boolean
 type PermState = Record<string, Record<string, Record<string, boolean>>>;
-
-const ROLE_OPTIONS = ['super_admin', 'developer', 'manager', 'front_desk', 'housekeeping', 'accountant', 'auditor', 'staff'];
 
 function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return '0 Bytes';
@@ -163,11 +161,13 @@ export function SecurityModule() {
   });
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
 
+  // Permissions state
   const [permRoles, setPermRoles] = useState<RoleWithPerms[]>([]);
   const [permState, setPermState] = useState<PermState>({});
   const [permLoading, setPermLoading] = useState(false);
   const [permSaving, setPermSaving] = useState(false);
 
+  // Backup state
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [backupLoading, setBackupLoading] = useState(false);
   const [backupCreating, setBackupCreating] = useState(false);
@@ -195,6 +195,7 @@ export function SecurityModule() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Backup handlers
   const fetchBackups = useCallback(async () => {
     try {
       setBackupLoading(true);
@@ -650,7 +651,7 @@ export function SecurityModule() {
                         <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {ROLE_OPTIONS.map(r => (
+                            {['super_admin', 'manager', 'front_desk', 'housekeeping', 'accountant', 'auditor', 'staff'].map(r => (
                               <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>
                             ))}
                           </SelectContent>
@@ -801,7 +802,7 @@ export function SecurityModule() {
                   <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {ROLE_OPTIONS.map(r => (
+                      {['super_admin', 'manager', 'front_desk', 'housekeeping', 'accountant', 'auditor', 'staff'].map(r => (
                         <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>
                       ))}
                     </SelectContent>
@@ -819,6 +820,7 @@ export function SecurityModule() {
 
               <Separator />
 
+              {/* Change Password Section */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <KeyRound className="h-4 w-4 text-amber-600" />
@@ -1064,6 +1066,7 @@ export function SecurityModule() {
             </CardContent>
           </Card>
 
+          {/* Legend */}
           <div className="flex items-center gap-6 text-xs text-muted-foreground px-1">
             <div className="flex items-center gap-1.5">
               <Checkbox checked disabled className="h-3.5 w-3.5 rounded" />
@@ -1089,6 +1092,7 @@ export function SecurityModule() {
 
         {/* ==================== BACKUP TAB ==================== */}
         <TabsContent value="backup" className="mt-4 space-y-4">
+          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -1115,6 +1119,7 @@ export function SecurityModule() {
             </div>
           </div>
 
+          {/* Auto-backup status card */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Card className="border-none shadow-sm">
               <CardContent className="p-4 flex items-center gap-3">
@@ -1161,6 +1166,7 @@ export function SecurityModule() {
             </Card>
           </div>
 
+          {/* Upload restore */}
           <Card className="border-none shadow-sm">
             <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -1192,6 +1198,7 @@ export function SecurityModule() {
             </CardContent>
           </Card>
 
+          {/* Backup list */}
           <Card className="border-none shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
@@ -1231,7 +1238,12 @@ export function SecurityModule() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium text-sm truncate">{backup.filename}</span>
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{backup.type}</Badge>
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] px-1.5 py-0 h-4"
+                          >
+                            {backup.type}
+                          </Badge>
                           <Badge
                             variant="outline"
                             className={`text-[10px] px-1.5 py-0 h-4 ${
@@ -1245,7 +1257,12 @@ export function SecurityModule() {
                             {backup.status}
                           </Badge>
                           {backup.storagePath && (
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-blue-300 text-blue-700">Cloud</Badge>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0 h-4 border-blue-300 text-blue-700"
+                            >
+                              Cloud
+                            </Badge>
                           )}
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
@@ -1255,12 +1272,23 @@ export function SecurityModule() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-blue-600" onClick={() => handleDownloadBackup(backup)} title="Download">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-blue-600"
+                          onClick={() => handleDownloadBackup(backup)}
+                          title="Download"
+                        >
                           <Download className="h-4 w-4" />
                         </Button>
                         <AlertDialog open={restoreConfirm?.id === backup.id} onOpenChange={(open) => { if (!open) setRestoreConfirm(null); else setRestoreConfirm(backup); }}>
                           <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-emerald-600" title="Restore">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-muted-foreground hover:text-emerald-600"
+                              title="Restore"
+                            >
                               <RotateCcw className="h-4 w-4" />
                             </Button>
                           </AlertDialogTrigger>
@@ -1274,13 +1302,23 @@ export function SecurityModule() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleRestoreBackup(backup)} className="bg-emerald-500 hover:bg-emerald-600 text-white">Restore Now</AlertDialogAction>
+                              <AlertDialogAction
+                                onClick={() => handleRestoreBackup(backup)}
+                                className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                              >
+                                Restore Now
+                              </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-red-600" title="Delete">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                              title="Delete"
+                            >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </AlertDialogTrigger>
@@ -1293,7 +1331,12 @@ export function SecurityModule() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteBackup(backup.id)} className="bg-red-500 hover:bg-red-600 text-white">Delete</AlertDialogAction>
+                              <AlertDialogAction
+                                onClick={() => handleDeleteBackup(backup.id)}
+                                className="bg-red-500 hover:bg-red-600 text-white"
+                              >
+                                Delete
+                              </AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
@@ -1333,12 +1376,14 @@ function ModuleAccessTab() {
     staff: 'bg-gray-100 text-gray-700',
   };
 
+  // Modules to show in the grid (exclude developer-only and admin-only modules)
   const VISIBLE_MODULES = ALL_MODULE_KEYS.filter(
     (m) => m !== 'developer_tools' && m !== 'cloud' && m !== 'security'
   );
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -1351,17 +1396,31 @@ function ModuleAccessTab() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => saveToServer()} disabled={isSaving}>
+          <Button
+            size="sm"
+            className="bg-amber-500 hover:bg-amber-600 text-white"
+            onClick={() => saveToServer()}
+            disabled={isSaving}
+          >
             <Save className="h-4 w-4 mr-1.5" />
             {isSaving ? 'Saving...' : 'Save Changes'}
           </Button>
-          <Button size="sm" variant="outline" onClick={async () => { resetToDefaults(); await saveToServer(); }} disabled={isSaving}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              resetToDefaults();
+              await saveToServer();
+            }}
+            disabled={isSaving}
+          >
             <RotateCcw className="h-4 w-4 mr-1.5" />
             Reset Defaults
           </Button>
         </div>
       </div>
 
+      {/* Fixed role info cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex items-center gap-3 p-3 rounded-lg border border-amber-200 bg-amber-50/50">
           <div className="h-8 w-8 rounded-lg bg-amber-500 flex items-center justify-center">
@@ -1385,6 +1444,7 @@ function ModuleAccessTab() {
         </div>
       </div>
 
+      {/* Configurable roles grid */}
       <Card className="border-none shadow-sm">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -1394,7 +1454,9 @@ function ModuleAccessTab() {
                   <TableHead className="sticky left-0 bg-background z-10 min-w-[150px]">Role</TableHead>
                   {VISIBLE_MODULES.map((mod) => (
                     <TableHead key={mod} className="min-w-[100px] text-center">
-                      <span className="text-[10px] font-medium uppercase tracking-wider">{MODULE_LABELS[mod] || mod}</span>
+                      <span className="text-[10px] font-medium uppercase tracking-wider">
+                        {MODULE_LABELS[mod] || mod}
+                      </span>
                     </TableHead>
                   ))}
                   <TableHead className="min-w-[100px] text-center">
@@ -1406,6 +1468,7 @@ function ModuleAccessTab() {
                 {CONFIGURABLE_ROLES.map((role) => {
                   const modules = accessMap[role];
                   const moduleCount = modules ? modules.size : 0;
+
                   return (
                     <TableRow key={role}>
                       <TableCell className="sticky left-0 bg-background z-10">
@@ -1428,8 +1491,24 @@ function ModuleAccessTab() {
                       ))}
                       <TableCell className="text-center p-1">
                         <div className="flex items-center justify-center gap-1">
-                          <Button size="sm" variant="ghost" className="h-7 text-[10px] text-green-600 hover:text-green-700 hover:bg-green-50" onClick={() => grantAll(role)} title="Grant all modules">All</Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-[10px] text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => revokeAll(role)} title="Revoke all (except Dashboard)">None</Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[10px] text-green-600 hover:text-green-700 hover:bg-green-50"
+                            onClick={() => grantAll(role)}
+                            title="Grant all modules"
+                          >
+                            All
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[10px] text-red-500 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => revokeAll(role)}
+                            title="Revoke all (except Dashboard)"
+                          >
+                            None
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1441,6 +1520,7 @@ function ModuleAccessTab() {
         </CardContent>
       </Card>
 
+      {/* Legend */}
       <div className="flex items-center gap-6 text-xs text-muted-foreground px-1">
         <div className="flex items-center gap-1.5">
           <Checkbox checked disabled className="h-4 w-4 rounded" />
@@ -1456,6 +1536,7 @@ function ModuleAccessTab() {
         </div>
       </div>
 
+      {/* Note */}
       <p className="text-xs text-muted-foreground px-1">
         Note: Cloud Storage and Developer Tools are restricted to the Developer role only and cannot be granted to other roles.
         Security module access is controlled via the Permissions tab above.
