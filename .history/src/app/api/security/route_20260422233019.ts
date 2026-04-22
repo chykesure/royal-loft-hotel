@@ -61,10 +61,7 @@ export async function GET(request: NextRequest) {
 
       // Get or create all permissions
       const existingPerms = await db.permission.findMany();
-      const permMap = new Map<string, boolean>();
-      for (const p of existingPerms) {
-        permMap.set(`${p.module}-${p.action}`, true);
-      }
+      const permMap = new Map(existingPerms.map(p => `${p.module}-${p.action}`));
 
       for (const mod of allModules) {
         for (const act of allActions) {
@@ -240,12 +237,12 @@ export async function DELETE(request: NextRequest) {
       }
 
       // Delete related records first (in correct order to avoid constraint errors)
-      try { await db.session.deleteMany({ where: { userId: id } }); } catch { }
-      try { await db.auditLog.deleteMany({ where: { userId: id } }); } catch { }
-      try { await db.securityAlert.deleteMany({ where: { userId: id } }); } catch { }
-      try { await db.notification.deleteMany({ where: { userId: id } }); } catch { }
-      try { await db.staffProfile.deleteMany({ where: { userId: id } }); } catch { }
-      try { await db.maintenanceRequest.deleteMany({ where: { reportedBy: id } }); } catch { }
+      try { await db.session.deleteMany({ where: { userId: id } }); } catch {}
+      try { await db.auditLog.deleteMany({ where: { userId: id } }); } catch {}
+      try { await db.securityAlert.deleteMany({ where: { userId: id } }); } catch {}
+      try { await db.notification.deleteMany({ where: { userId: id } }); } catch {}
+      try { await db.staffProfile.deleteMany({ where: { userId: id } }); } catch {}
+      try { await db.maintenanceRequest.deleteMany({ where: { reportedBy: id } }); } catch {}
 
       // Now delete the user
       await db.user.delete({ where: { id } });
