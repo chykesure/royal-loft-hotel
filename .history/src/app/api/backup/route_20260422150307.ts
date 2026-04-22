@@ -222,6 +222,7 @@ async function performRestore(
 
   for (const tableName of clearOrder) {
     try {
+      // @ts-expect-error dynamic model access
       await db[tableName].deleteMany();
     } catch {
       // Table might not exist — skip

@@ -31,7 +31,6 @@ interface DashboardData {
     activeReservations: number;
     checkInsToday: number;
     checkOutsToday: number;
-    overdueCheckouts?: number;
   };
   roomStatus: {
     available: number;
@@ -60,13 +59,6 @@ interface DashboardData {
     status: string;
   }>;
   departures: Array<{
-    id: string;
-    guest: { firstName: string; lastName: string; phone: string };
-    room: { roomNumber: string };
-    checkOut: string;
-    status: string;
-  }>;
-  overdueCheckouts?: Array<{
     id: string;
     guest: { firstName: string; lastName: string; phone: string };
     room: { roomNumber: string };
@@ -147,7 +139,6 @@ function getActionColor(action: string): string {
 export function DashboardModule() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [lastBackupText, setLastBackupText] = useState('--');
   const { user } = useAuthStore();
   const { setCurrentModule } = useAppStore();
 
@@ -166,56 +157,6 @@ export function DashboardModule() {
     }
   };
 
-  // Auto-backup: trigger on dashboard load if 6 hours have passed
-  // Also fetch backup status for the indicator card
-  // Runs a check every 30 minutes while the dashboard is open
-  useEffect(() => {
-    if (user?.role !== 'super_admin') return;
-
-    const checkAutoBackup = () => {
-      fetch('/api/backup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'auto-check' }),
-      }).catch(() => {});
-    };
-
-    // Run immediately on load
-    checkAutoBackup();
-
-    // Then check every 30 minutes (1800000ms)
-    const interval = setInterval(checkAutoBackup, 30 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, [user?.role]);
-
-  // Fetch backup status for the indicator card
-  useEffect(() => {
-    if (user?.role !== 'super_admin') return;
-
-    const fetchStatus = () => {
-      fetch('/api/backup?status=auto')
-        .then((res) => res.ok ? res.json() : null)
-        .then((status) => {
-          if (!status) { setLastBackupText('--'); return; }
-          if (!status.lastAutoBackup) { setLastBackupText('Never'); return; }
-          const ago = Date.now() - new Date(status.lastAutoBackup).getTime();
-          const hours = Math.floor(ago / (1000 * 60 * 60));
-          const mins = Math.floor((ago % (1000 * 60 * 60)) / (1000 * 60));
-          if (hours < 1) setLastBackupText(`${mins}m ago`);
-          else if (hours < 24) setLastBackupText(`${hours}h ago`);
-          else setLastBackupText(`${Math.floor(hours / 24)}d ago`);
-        })
-        .catch(() => setLastBackupText('--'));
-    };
-
-    fetchStatus();
-    // Refresh status every 5 minutes
-    const interval = setInterval(fetchStatus, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, [user?.role]);
-
   useEffect(() => {
     fetchData();
   }, []);
@@ -231,7 +172,7 @@ export function DashboardModule() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold">
-            {greeting}, {user?.name?.split(' ')[0] || 'User'}
+            {greeting}, {user?.name?.split(' ')[0] || 'User'} 👋
           </h2>
           <p className="text-sm text-muted-foreground">Here&apos;s what&apos;s happening at Royal Loft today.</p>
         </div>
@@ -268,43 +209,6 @@ export function DashboardModule() {
         <RecentReservations reservations={data?.recentReservations ?? []} isLoading={isLoading} />
         <TodayActivity arrivals={data?.arrivals ?? []} departures={data?.departures ?? []} isLoading={isLoading} />
       </div>
-
-      {/* Overdue Checkouts Alert */}
-      {data?.overdueCheckouts && data.overdueCheckouts.length > 0 && (
-        <Card className="border-red-200 bg-red-50/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2 text-red-700">
-              <AlertTriangle className="h-4 w-4" />
-              Overdue Checkouts ({data.overdueCheckouts.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {data.overdueCheckouts.map((res) => {
-                const daysOverdue = Math.max(0, Math.floor((new Date().getTime() - new Date(res.checkOut).getTime()) / (1000 * 60 * 60 * 24)));
-                return (
-                  <div key={res.id} className="flex items-center justify-between p-3 rounded-lg bg-white border border-red-100">
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-lg bg-red-100 p-2">
-                        <Clock className="h-4 w-4 text-red-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{res.guest.firstName} {res.guest.lastName}</p>
-                        <p className="text-xs text-muted-foreground">Room {res.room.roomNumber} &bull; Was due {new Date(res.checkOut).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <Badge className="bg-red-100 text-red-700 border border-red-200 animate-pulse">
-                        {daysOverdue} day{daysOverdue !== 1 ? 's' : ''} overdue
-                      </Badge>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* ===== SUPER ADMIN SECTION ===== */}
       {user?.role === 'super_admin' && sys && (
@@ -369,13 +273,6 @@ export function DashboardModule() {
                 <Activity className="h-4 w-4 text-amber-600" />
                 <p className="text-lg font-bold">99.9%</p>
                 <p className="text-xs text-muted-foreground">Uptime</p>
-              </CardContent>
-            </Card>
-            <Card className="py-4">
-              <CardContent className="p-4 flex flex-col items-center text-center gap-1">
-                <Database className="h-4 w-4 text-blue-600" />
-                <p className="text-lg font-bold">{lastBackupText}</p>
-                <p className="text-xs text-muted-foreground">Last Backup</p>
               </CardContent>
             </Card>
           </div>

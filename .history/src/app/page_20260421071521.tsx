@@ -1,9 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/store/auth-store';
-import { useSessionTimeout } from '@/hooks/useSessionTimeout';
-import { SessionTimeoutDialog } from '@/components/auth/SessionTimeoutDialog';
 import { useAppStore, type ModuleKey } from '@/store/app-store';
 import { useRoleAccessStore } from '@/store/role-access-store';
 import { LoginForm } from '@/components/auth/LoginForm';
@@ -72,18 +70,9 @@ const moduleComponents: Record<ModuleKey, React.ComponentType> = {
 };
 
 export default function Home() {
-  const { isAuthenticated, isLoading, setUser, user, logout } = useAuthStore();
+  const { isAuthenticated, isLoading, setUser, user } = useAuthStore();
   const { currentModule, setCurrentModule } = useAppStore();
   const { isLoaded, canSee, init } = useRoleAccessStore();
-
-  // Session timeout: auto-logout after 30 minutes of inactivity
-  const handleTimeoutLogout = useCallback(() => {
-    logout();
-  }, [logout]);
-  const { showWarning, countdownSeconds, stayLoggedIn } = useSessionTimeout(
-    handleTimeoutLogout,
-    isAuthenticated
-  );
 
   useEffect(() => {
     const initApp = async () => {
@@ -177,11 +166,6 @@ export default function Home() {
       </SidebarInset>
       <ChatBubble />
       <Toaster richColors position="top-right" />
-      <SessionTimeoutDialog
-        open={showWarning}
-        countdownSeconds={countdownSeconds}
-        onStayLoggedIn={stayLoggedIn}
-      />
     </SidebarProvider>
   );
 }

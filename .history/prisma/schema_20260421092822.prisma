@@ -690,21 +690,3 @@ model HotelSetting {
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
 }
-
-model Backup {
-  id            String   @id @default(cuid())
-  name          String
-  type          String   @default("manual")
-  status        String   @default("pending")
-  sizeBytes     Int      @default(0)
-  tablesCount   Int      @default(0)
-  recordsCount  Int      @default(0)
-  storagePath   String?
-  data          String?
-  createdBy     String?
-  createdByName String?
-  error         String?
-  createdAt     DateTime @default(now())
-
-  @@index([createdAt])
-}

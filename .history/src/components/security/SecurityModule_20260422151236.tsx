@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -27,11 +27,9 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress';
 import {
   Search, Plus, RefreshCw, Shield, CheckCircle, AlertTriangle, Users,
   FileText, Pencil, Trash2, Save, KeyRound, Lock, Eye, RotateCcw, Code,
-  Database, HardDrive, Upload, Download, Clock,
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/auth';
 import { useAuthStore } from '@/store/auth-store';
@@ -64,17 +62,6 @@ interface RoleWithPerms {
   name: string;
   description?: string | null;
   permissions: { permissionId: string; permission: { id: string; module: string; action: string } }[];
-}
-
-interface BackupRecord {
-  id: string;
-  filename: string;
-  type: string;
-  status: string;
-  size: number;
-  recordCount: number;
-  storagePath?: string | null;
-  createdAt: string;
 }
 
 const roleColors: Record<string, string> = {
@@ -131,15 +118,6 @@ const ACTION_LABELS: Record<string, string> = {
 // Permission state: role.id -> module -> action -> boolean
 type PermState = Record<string, Record<string, Record<string, boolean>>>;
 
-function formatBytes(bytes: number, decimals = 2): string {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-}
-
 export function SecurityModule() {
   const { user } = useAuthStore();
   const canManageUsers = user?.role === 'super_admin' || user?.role === 'developer';
@@ -167,14 +145,6 @@ export function SecurityModule() {
   const [permLoading, setPermLoading] = useState(false);
   const [permSaving, setPermSaving] = useState(false);
 
-  // Backup state
-  const [backups, setBackups] = useState<BackupRecord[]>([]);
-  const [backupLoading, setBackupLoading] = useState(false);
-  const [backupCreating, setBackupCreating] = useState(false);
-  const [autoBackupStatus, setAutoBackupStatus] = useState<{ enabled: boolean; lastBackup: string | null; nextBackup: string | null } | null>(null);
-  const [restoreConfirm, setRestoreConfirm] = useState<BackupRecord | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const fetchData = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -194,146 +164,6 @@ export function SecurityModule() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  // Backup handlers
-  const fetchBackups = useCallback(async () => {
-    try {
-      setBackupLoading(true);
-      const res = await fetch('/api/backup');
-      if (res.ok) {
-        const data = await res.json();
-        setBackups(Array.isArray(data) ? data : data.backups || []);
-      }
-    } catch {
-      toast.error('Failed to load backups');
-    } finally {
-      setBackupLoading(false);
-    }
-  }, []);
-
-  const fetchAutoBackupStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/backup?status=auto');
-      if (res.ok) {
-        const data = await res.json();
-        setAutoBackupStatus(data);
-      }
-    } catch {
-      // silent
-    }
-  }, []);
-
-  const handleCreateBackup = async () => {
-    try {
-      setBackupCreating(true);
-      toast.info('Creating backup...');
-      const res = await fetch('/api/backup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create-manual' }),
-      });
-      if (res.ok) {
-        toast.success('Backup created successfully');
-        fetchBackups();
-        fetchAutoBackupStatus();
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to create backup');
-      }
-    } catch {
-      toast.error('Failed to create backup');
-    } finally {
-      setBackupCreating(false);
-    }
-  };
-
-  const handleDownloadBackup = async (backup: BackupRecord) => {
-    try {
-      const res = await fetch(`/api/backup?id=${backup.id}`);
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = backup.filename || `backup-${backup.id}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        toast.success('Backup downloaded');
-      } else {
-        toast.error('Failed to download backup');
-      }
-    } catch {
-      toast.error('Failed to download backup');
-    }
-  };
-
-  const handleDeleteBackup = async (backupId: string) => {
-    try {
-      const res = await fetch('/api/backup', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: backupId }),
-      });
-      if (res.ok) {
-        toast.success('Backup deleted');
-        fetchBackups();
-      } else {
-        toast.error('Failed to delete backup');
-      }
-    } catch {
-      toast.error('Failed to delete backup');
-    }
-  };
-
-  const handleRestoreBackup = async (backup: BackupRecord) => {
-    try {
-      toast.info('Restoring backup... This may take a moment.');
-      const res = await fetch('/api/backup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'restore', backupId: backup.id }),
-      });
-      if (res.ok) {
-        toast.success('Backup restored successfully! Please refresh the page.');
-        fetchData();
-        fetchBackups();
-        setRestoreConfirm(null);
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to restore backup');
-      }
-    } catch {
-      toast.error('Failed to restore backup');
-    }
-  };
-
-  const handleUploadRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      toast.info('Uploading and restoring backup...');
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/backup', {
-        method: 'POST',
-        body: formData,
-      });
-      if (res.ok) {
-        toast.success('Backup restored from uploaded file! Please refresh the page.');
-        fetchData();
-        fetchBackups();
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to restore from upload');
-      }
-    } catch {
-      toast.error('Failed to restore from upload');
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
 
   const fetchPermissions = useCallback(async () => {
     try {
@@ -620,9 +450,6 @@ export function SecurityModule() {
           {canManageUsers && (
             <TabsTrigger value="module-access"><Eye className="h-4 w-4 mr-1.5" /> Module Access</TabsTrigger>
           )}
-          {canManageUsers && (
-            <TabsTrigger value="backup"><Database className="h-4 w-4 mr-1.5" /> Backup</TabsTrigger>
-          )}
         </TabsList>
 
         {/* ==================== USERS TAB ==================== */}
@@ -635,35 +462,35 @@ export function SecurityModule() {
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={fetchData}><RefreshCw className="h-4 w-4" /></Button>
               {canManageUsers && (
-              <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"><Plus className="h-4 w-4 mr-1" /> Add User</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
-                  <div className="grid gap-4 py-2">
-                    <div className="grid gap-2"><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                    <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-                    <div className="grid gap-2"><Label>Password *</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label>Role</Label>
-                        <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {['super_admin', 'manager', 'front_desk', 'housekeeping', 'accountant', 'auditor', 'staff'].map(r => (
-                              <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"><Plus className="h-4 w-4 mr-1" /> Add User</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
+                    <div className="grid gap-4 py-2">
+                      <div className="grid gap-2"><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                      <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+                      <div className="grid gap-2"><Label>Password *</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label>Role</Label>
+                          <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {['super_admin', 'manager', 'front_desk', 'housekeeping', 'accountant', 'auditor', 'staff'].map(r => (
+                                <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
                       </div>
-                      <div className="grid gap-2"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+                      <div className="grid gap-2"><Label>Department</Label><Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
+                      <Button onClick={handleCreateUser} className="bg-amber-500 hover:bg-amber-600 text-white">Create User</Button>
                     </div>
-                    <div className="grid gap-2"><Label>Department</Label><Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
-                    <Button onClick={handleCreateUser} className="bg-amber-500 hover:bg-amber-600 text-white">Create User</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                  </DialogContent>
+                </Dialog>
               )}
             </div>
           </div>
@@ -720,44 +547,44 @@ export function SecurityModule() {
                         </TableCell>
                         <TableCell className="text-right">
                           {canManageUsers && (
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground hover:text-amber-600"
-                              onClick={() => handleEditUser(user)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <AlertDialog open={deletingUser?.id === user.id} onOpenChange={(open) => { if (!open) setDeletingUser(null); else setDeletingUser(user); }}>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8 text-muted-foreground hover:text-red-600"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete User</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Are you sure you want to delete <span className="font-semibold">{user.name}</span>? This action cannot be undone. All associated data including sessions, staff profile, and audit logs references will be removed.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={handleDeleteUser}
-                                    className="bg-red-500 hover:bg-red-600 text-white"
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-muted-foreground hover:text-amber-600"
+                                onClick={() => handleEditUser(user)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <AlertDialog open={deletingUser?.id === user.id} onOpenChange={(open) => { if (!open) setDeletingUser(null); else setDeletingUser(user); }}>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8 text-muted-foreground hover:text-red-600"
                                   >
-                                    Delete User
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete User</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to delete <span className="font-semibold">{user.name}</span>? This action cannot be undone. All associated data including sessions, staff profile, and audit logs references will be removed.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={handleDeleteUser}
+                                      className="bg-red-500 hover:bg-red-600 text-white"
+                                    >
+                                      Delete User
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
                           )}
                         </TableCell>
                       </TableRow>
@@ -1090,265 +917,6 @@ export function SecurityModule() {
           <ModuleAccessTab />
         </TabsContent>
 
-        {/* ==================== BACKUP TAB ==================== */}
-        <TabsContent value="backup" className="mt-4 space-y-4">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Database className="h-5 w-5 text-amber-600" />
-                Database Backup
-              </h3>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Automatic backups every 6 hours. Keep the last 10 backups. Manual backup and restore available.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => { fetchBackups(); fetchAutoBackupStatus(); }}>
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                className="bg-amber-500 hover:bg-amber-600 text-white"
-                onClick={handleCreateBackup}
-                disabled={backupCreating}
-              >
-                <Database className="h-4 w-4 mr-1.5" />
-                {backupCreating ? 'Creating...' : 'Create Backup'}
-              </Button>
-            </div>
-          </div>
-
-          {/* Auto-backup status card */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Card className="border-none shadow-sm">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <Clock className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Auto-Backup</p>
-                  <p className="text-sm font-medium">
-                    {autoBackupStatus?.enabled ? (
-                      <Badge className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 h-5">Enabled</Badge>
-                    ) : (
-                      <Badge className="bg-gray-100 text-gray-700 text-[10px] px-2 py-0.5 h-5">Disabled</Badge>
-                    )}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-none shadow-sm">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                  <HardDrive className="h-5 w-5 text-emerald-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Last Backup</p>
-                  <p className="text-sm font-medium">
-                    {autoBackupStatus?.lastBackup
-                      ? formatDateTime(autoBackupStatus.lastBackup)
-                      : 'Never'}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-none shadow-sm">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                  <Database className="h-5 w-5 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Backups</p>
-                  <p className="text-sm font-medium">{backups.length} / 10</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Upload restore */}
-          <Card className="border-none shadow-sm">
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <Upload className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Restore from file:</span>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".json"
-                    className="hidden"
-                    onChange={handleUploadRestore}
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-4 w-4 mr-1.5" />
-                    Choose .json File
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Warning: Restore will overwrite all current data.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Backup list */}
-          <Card className="border-none shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Database className="h-4 w-4" />
-                Backup History
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {backupLoading ? (
-                <div className="space-y-2">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <Skeleton key={i} className="h-14 w-full" />
-                  ))}
-                </div>
-              ) : backups.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Database className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">No backups yet</p>
-                  <p className="text-xs mt-1">Click &quot;Create Backup&quot; to create your first backup</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
-                  {backups.map((backup) => (
-                    <div
-                      key={backup.id}
-                      className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 text-sm"
-                    >
-                      <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
-                        backup.type === 'auto'
-                          ? 'bg-blue-100'
-                          : 'bg-amber-100'
-                      }`}>
-                        <Database className={`h-4 w-4 ${
-                          backup.type === 'auto' ? 'text-blue-600' : 'text-amber-600'
-                        }`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium text-sm truncate">{backup.filename}</span>
-                          <Badge
-                            variant="secondary"
-                            className="text-[10px] px-1.5 py-0 h-4"
-                          >
-                            {backup.type}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] px-1.5 py-0 h-4 ${
-                              backup.status === 'completed'
-                                ? 'border-emerald-300 text-emerald-700'
-                                : backup.status === 'failed'
-                                ? 'border-red-300 text-red-700'
-                                : ''
-                            }`}
-                          >
-                            {backup.status}
-                          </Badge>
-                          {backup.storagePath && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] px-1.5 py-0 h-4 border-blue-300 text-blue-700"
-                            >
-                              Cloud
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                          <span>{formatDateTime(backup.createdAt)}</span>
-                          <span>{formatBytes(backup.size)}</span>
-                          <span>{backup.recordCount} records</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-muted-foreground hover:text-blue-600"
-                          onClick={() => handleDownloadBackup(backup)}
-                          title="Download"
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <AlertDialog open={restoreConfirm?.id === backup.id} onOpenChange={(open) => { if (!open) setRestoreConfirm(null); else setRestoreConfirm(backup); }}>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground hover:text-emerald-600"
-                              title="Restore"
-                            >
-                              <RotateCcw className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Restore Backup</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to restore from <span className="font-semibold">{backup.filename}</span>?
-                                This will replace ALL current data with the backup data. This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleRestoreBackup(backup)}
-                                className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                              >
-                                Restore Now
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground hover:text-red-600"
-                              title="Delete"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Backup</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete <span className="font-semibold">{backup.filename}</span>? This cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeleteBackup(backup.id)}
-                                className="bg-red-500 hover:bg-red-600 text-white"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
       </Tabs>
     </div>
   );
@@ -1443,104 +1011,256 @@ function ModuleAccessTab() {
           <Badge className="bg-red-500 text-white text-[10px]">MOST MODULES</Badge>
         </div>
       </div>
-
-      {/* Configurable roles grid */}
-      <Card className="border-none shadow-sm">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="sticky left-0 bg-background z-10 min-w-[150px]">Role</TableHead>
-                  {VISIBLE_MODULES.map((mod) => (
-                    <TableHead key={mod} className="min-w-[100px] text-center">
-                      <span className="text-[10px] font-medium uppercase tracking-wider">
-                        {MODULE_LABELS[mod] || mod}
-                      </span>
-                    </TableHead>
-                  ))}
-                  <TableHead className="min-w-[100px] text-center">
-                    <span className="text-[10px] font-medium uppercase tracking-wider">Actions</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {CONFIGURABLE_ROLES.map((role) => {
-                  const modules = accessMap[role];
-                  const moduleCount = modules ? modules.size : 0;
-
-                  return (
-                    <TableRow key={role}>
-                      <TableCell className="sticky left-0 bg-background z-10">
-                        <div className="flex items-center gap-2">
-                          <Badge className={`text-[10px] px-2 py-0.5 h-5 ${ROLE_BADGE_COLORS[role] || ''}`}>
-                            {ROLE_LABELS[role] || role}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">({moduleCount})</span>
-                        </div>
-                      </TableCell>
-                      {VISIBLE_MODULES.map((mod) => (
-                        <TableCell key={mod} className="text-center p-1.5">
-                          <Checkbox
-                            checked={modules?.has(mod) || false}
-                            onCheckedChange={() => toggleModule(role, mod)}
-                            disabled={mod === 'dashboard'}
-                            className="h-4 w-4 rounded"
-                          />
-                        </TableCell>
-                      ))}
-                      <TableCell className="text-center p-1">
-                        <div className="flex items-center justify-center gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-[10px] text-green-600 hover:text-green-700 hover:bg-green-50"
-                            onClick={() => grantAll(role)}
-                            title="Grant all modules"
-                          >
-                            All
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-[10px] text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => revokeAll(role)}
-                            title="Revoke all (except Dashboard)"
-                          >
-                            None
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+      {/* ==================== BACKUPS TAB ==================== */}
+      <TabsContent value="backups" className="mt-4 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <Database className="h-5 w-5 text-amber-600" />
+              Database Backups
+            </h3>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Automatic backups every 6 hours. Manual backup anytime. Keeps last 10.
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={fetchData} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+            <label className="cursor-pointer">
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleUploadRestore(file);
+                  e.target.value = '';
+                }}
+              />
+              <Button size="sm" variant="outline" asChild>
+                <span><Upload className="h-4 w-4 mr-1" /> Restore from File</span>
+              </Button>
+            </label>
+            <Button
+              size="sm"
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={handleCreateBackup}
+              disabled={creatingBackup}
+            >
+              <HardDrive className={`h-4 w-4 mr-1 ${creatingBackup ? 'animate-pulse' : ''}`} />
+              {creatingBackup ? 'Creating...' : 'Create Backup Now'}
+            </Button>
+          </div>
+        </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-6 text-xs text-muted-foreground px-1">
-        <div className="flex items-center gap-1.5">
-          <Checkbox checked disabled className="h-4 w-4 rounded" />
-          <span>Visible</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Checkbox className="h-4 w-4 rounded" />
-          <span>Hidden</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Checkbox checked disabled className="h-4 w-4 rounded opacity-50" />
-          <span>Dashboard (always visible)</span>
-        </div>
-      </div>
+        <Card className="border-none shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-600" /> Backup History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div>{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 w-full mb-2" />)}</div>
+            ) : backups.length === 0 ? (
+              <div className="text-center py-8">
+                <Database className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground">No backups yet</p>
+                <p className="text-xs text-muted-foreground mt-1">Click "Create Backup Now" to create your first backup</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {backups.map((backup) => (
+                  <div key={backup.id} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/30 text-sm">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`rounded-full p-1.5 ${backup.status === 'completed' ? 'bg-emerald-100' : backup.status === 'failed' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                        {backup.status === 'completed'
+                          ? <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                          : backup.status === 'failed'
+                            ? <AlertTriangle className="h-3.5 w-3.5 text-red-600" />
+                            : <Clock className="h-3.5 w-3.5 text-amber-600" />
+                        }
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">{backup.name}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 ${backup.type === 'auto' ? 'bg-blue-50 text-blue-600' : 'bg-violet-50 text-violet-600'}`}>
+                            {backup.type === 'auto' ? 'Auto' : 'Manual'}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{backup.sizeFormatted}</span>
+                          <span className="text-xs text-muted-foreground">{backup.tablesCount} tables</span>
+                          <span className="text-xs text-muted-foreground">{backup.recordsCount} records</span>
+                        </div>
+                        {backup.error && <p className="text-xs text-red-500 mt-0.5">{backup.error}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[10px] text-muted-foreground hidden sm:block mr-2">
+                        {formatDateTime(backup.createdAt)}
+                      </span>
+                      {backup.status === 'completed' && (
+                        <>
+                          <Button
+                            size="icon" variant="ghost" className="h-8 w-8"
+                            title="Download"
+                            onClick={() => handleDownloadBackup(backup.id)}
+                          >
+                            <Download className="h-4 w-4 text-blue-500" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost" className="h-8 w-8" title="Restore this backup">
+                                <Upload className="h-4 w-4 text-amber-500" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Restore from this backup?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will <span className="font-semibold text-red-600">delete ALL current data</span> and replace it with the backup from{' '}
+                                  <span className="font-medium">{new Date(backup.createdAt).toLocaleString()}</span>.{' '}
+                                  This action cannot be undone. Make sure to create a backup of your current data first!
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleRestoreBackup(backup.id)} className="bg-red-500 hover:bg-red-600 text-white">
+                                  Yes, Restore
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </>
+                      )}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-8 w-8" title="Delete backup">
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-red-600" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Backup</AlertDialogTitle>
+                            <AlertDialogDescription>Are you sure you want to delete this backup? This action cannot be undone.</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => handleDeleteBackup(backup.id)} className="bg-red-500 hover:bg-red-600 text-white">
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
+    </div >
+  );
+}
+{/* Configurable roles grid */ }
+<Card className="border-none shadow-sm">
+  <CardContent className="p-0">
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="sticky left-0 bg-background z-10 min-w-[150px]">Role</TableHead>
+            {VISIBLE_MODULES.map((mod) => (
+              <TableHead key={mod} className="min-w-[100px] text-center">
+                <span className="text-[10px] font-medium uppercase tracking-wider">
+                  {MODULE_LABELS[mod] || mod}
+                </span>
+              </TableHead>
+            ))}
+            <TableHead className="min-w-[100px] text-center">
+              <span className="text-[10px] font-medium uppercase tracking-wider">Actions</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {CONFIGURABLE_ROLES.map((role) => {
+            const modules = accessMap[role];
+            const moduleCount = modules ? modules.size : 0;
 
-      {/* Note */}
-      <p className="text-xs text-muted-foreground px-1">
-        Note: Cloud Storage and Developer Tools are restricted to the Developer role only and cannot be granted to other roles.
-        Security module access is controlled via the Permissions tab above.
-      </p>
+            return (
+              <TableRow key={role}>
+                <TableCell className="sticky left-0 bg-background z-10">
+                  <div className="flex items-center gap-2">
+                    <Badge className={`text-[10px] px-2 py-0.5 h-5 ${ROLE_BADGE_COLORS[role] || ''}`}>
+                      {ROLE_LABELS[role] || role}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">({moduleCount})</span>
+                  </div>
+                </TableCell>
+                {VISIBLE_MODULES.map((mod) => (
+                  <TableCell key={mod} className="text-center p-1.5">
+                    <Checkbox
+                      checked={modules?.has(mod) || false}
+                      onCheckedChange={() => toggleModule(role, mod)}
+                      disabled={mod === 'dashboard'}
+                      className="h-4 w-4 rounded"
+                    />
+                  </TableCell>
+                ))}
+                <TableCell className="text-center p-1">
+                  <div className="flex items-center justify-center gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-[10px] text-green-600 hover:text-green-700 hover:bg-green-50"
+                      onClick={() => grantAll(role)}
+                      title="Grant all modules"
+                    >
+                      All
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-[10px] text-red-500 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => revokeAll(role)}
+                      title="Revoke all (except Dashboard)"
+                    >
+                      None
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
+  </CardContent>
+</Card>
+
+{/* Legend */ }
+<div className="flex items-center gap-6 text-xs text-muted-foreground px-1">
+  <div className="flex items-center gap-1.5">
+    <Checkbox checked disabled className="h-4 w-4 rounded" />
+    <span>Visible</span>
+  </div>
+  <div className="flex items-center gap-1.5">
+    <Checkbox className="h-4 w-4 rounded" />
+    <span>Hidden</span>
+  </div>
+  <div className="flex items-center gap-1.5">
+    <Checkbox checked disabled className="h-4 w-4 rounded opacity-50" />
+    <span>Dashboard (always visible)</span>
+  </div>
+</div>
+
+{/* Note */ }
+<p className="text-xs text-muted-foreground px-1">
+  Note: Cloud Storage and Developer Tools are restricted to the Developer role only and cannot be granted to other roles.
+  Security module access is controlled via the Permissions tab above.
+</p>
+    </div >
   );
 }

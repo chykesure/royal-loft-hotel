@@ -222,6 +222,7 @@ async function performRestore(
 
   for (const tableName of clearOrder) {
     try {
+      // @ts-expect-error dynamic model access
       await db[tableName].deleteMany();
     } catch {
       // Table might not exist — skip
@@ -252,6 +253,7 @@ async function performRestore(
     const modelKey = tableName.charAt(0).toLowerCase() + tableName.slice(1);
 
     try {
+      // @ts-expect-error dynamic model access
       const model = db[modelKey];
       if (model && model.createMany) {
         // Try batch insert first (faster)

@@ -23,10 +23,6 @@ const ALL_ACTIONS = ['view', 'create', 'edit', 'delete'];
 // Track whether seed has been triggered this process
 let seedTriggered = false;
 
-// Server-side idle timeout: 30 minutes (must match client-side hook)
-const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
-const MAX_SESSION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days absolute max
-
 export async function GET(request: NextRequest) {
   try {
     // ── Auto-seed if database is empty (only once per process) ──
@@ -59,23 +55,13 @@ export async function GET(request: NextRequest) {
       if (session) {
         await db.session.delete({ where: { id: session.id } });
       }
-      return NextResponse.json({ authenticated: false, reason: 'expired' }, { status: 401 });
+      return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    if (!session.user.isActive) {
-      await db.session.delete({ where: { id: session.id } });
-      return NextResponse.json({ authenticated: false, reason: 'disabled' }, { status: 401 });
-    }
-
-    // Refresh session expiry: extend by IDLE_TIMEOUT from now,
-    // but never beyond the absolute max session life (7 days from creation)
-    const maxExpiry = new Date(session.createdAt.getTime() + MAX_SESSION_MS);
-    const idleExpiry = new Date(Date.now() + IDLE_TIMEOUT_MS);
-    const newExpiry = idleExpiry < maxExpiry ? idleExpiry : maxExpiry;
-
+    // Refresh session expiry
     await db.session.update({
       where: { id: session.id },
-      data: { expiresAt: newExpiry },
+      data: { expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
     });
 
     const userRole = session.user.role;
