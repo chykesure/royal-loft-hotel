@@ -62,24 +62,11 @@ export async function GET() {
     const modules = await Promise.all(
       Object.entries(MODULE_MODELS).map(async ([key, config]) => {
         let totalCount = 0;
-        const workingModels: string[] = [];
-        const failedModels: string[] = [];
         for (const model of config.models) {
-          try {
-            const count = await (db[model] as any).count();
-            totalCount += count;
-            workingModels.push(model);
-          } catch {
-            failedModels.push(model);
-          }
+          const count = await (db[model] as any).count();
+          totalCount += count;
         }
-        return {
-          key,
-          label: config.label,
-          count: totalCount,
-          models: workingModels,
-          ...(failedModels.length > 0 ? { failedModels } : {}),
-        };
+        return { key, label: config.label, count: totalCount, models: config.models };
       })
     );
     return NextResponse.json({ modules });
