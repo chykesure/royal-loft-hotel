@@ -190,6 +190,7 @@ export function LoginForm() {
                   name="email"
                   type="email"
                   placeholder="you@royalloft.com"
+                  defaultValue="admin@royalloft.com"
                   required
                   className="h-11 bg-white border-slate-200 focus:border-amber-400 focus:ring-amber-400/20 text-sm placeholder:text-slate-400 transition-colors"
                 />
@@ -207,6 +208,7 @@ export function LoginForm() {
                     name="password"
                     type={showPassword ? 'text' : 'password'}
                     placeholder="Enter your password"
+                    defaultValue="Admin@123"
                     required
                     className="h-11 bg-white border-slate-200 focus:border-amber-400 focus:ring-amber-400/20 text-sm placeholder:text-slate-400 pr-11 transition-colors"
                   />
@@ -254,6 +256,24 @@ export function LoginForm() {
                 <span className="bg-gradient-to-br from-slate-50 via-white to-amber-50/30 px-3 text-muted-foreground">
                   System Access
                 </span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+              <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider mb-2">Default Credentials</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Admin</span>
+                  <code className="text-xs font-mono bg-white px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                    admin@royalloft.com
+                  </code>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Password</span>
+                  <code className="text-xs font-mono bg-white px-2 py-0.5 rounded-md border border-slate-200 text-slate-700">
+                    Admin@123
+                  </code>
+                </div>
               </div>
             </div>
 
