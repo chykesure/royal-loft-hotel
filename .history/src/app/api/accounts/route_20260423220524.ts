@@ -244,8 +244,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to load accounts data' }, { status: 500 });
   }
 }
-function buildPaymentMethodsBreakdown(payments: Array<{ paymentMethod?: string; amount?: number }>) {
-  const methodMap: { [key: string]: { total: number; label: string } } = {
+
+function buildPaymentMethodsBreakdown(payments: any[]) {
+  const methodMap: Record<string, { total: number; label: string }> = {
     cash: { total: 0, label: 'Cash' },
     pos: { total: 0, label: 'POS / Card' },
     bank_transfer: { total: 0, label: 'Bank Transfer' },
@@ -260,19 +261,16 @@ function buildPaymentMethodsBreakdown(payments: Array<{ paymentMethod?: string; 
   let grandTotal = 0;
 
   for (const p of payments) {
-    const pAmount: number = p.amount || 0;
-    const rawMethod: string = p.paymentMethod || 'cash';
-    const method: string = rawMethod.toLowerCase().trim();
-
+    const method = (p.paymentMethod || 'cash').toLowerCase().trim();
     if (methodMap[method]) {
-      methodMap[method].total = methodMap[method].total + pAmount;
+      methodMap[method].total += p.amount || 0;
     } else {
       methodMap[method] = {
-        total: pAmount,
+        total: (methodMap[method]?.total || 0) + (p.amount || 0),
         label: method.charAt(0).toUpperCase() + method.slice(1).replace(/_/g, ' '),
       };
     }
-    grandTotal = grandTotal + pAmount;
+    grandTotal += p.amount || 0;
   }
 
   const breakdown: Array<{ method: string; label: string; total: number; percentage: number }> = [];
@@ -280,7 +278,7 @@ function buildPaymentMethodsBreakdown(payments: Array<{ paymentMethod?: string; 
   for (const [method, data] of Object.entries(methodMap)) {
     if (data.total > 0) {
       breakdown.push({
-        method: method,
+        method,
         label: data.label,
         total: data.total,
         percentage: grandTotal > 0 ? Math.round((data.total / grandTotal) * 100) : 0,
