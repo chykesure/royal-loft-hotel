@@ -188,13 +188,13 @@ export function AccountsModule() {
   if (!data) return null;
 
   const monthlyRevenue = data.monthlyRevenue || 0;
-  const outstandingBills = data.outstandingBills || { count: 0, total: 0 };
-  const totalExpenses = data.totalExpenses || 0;
-  const netProfit = data.netProfit || 0;
-  const revenueByCategory = data.revenueByCategory || [];
-  const recentTransactions = data.recentTransactions || [];
-  const paymentMethodsBreakdown = data.paymentMethodsBreakdown || [];
-  const trends = data.trends || { revenue: 0, profit: 0 };
+const outstandingBills = data.outstandingBills || { count: 0, total: 0 };
+const totalExpenses = data.totalExpenses || 0;
+const netProfit = data.netProfit || 0;
+const revenueByCategory = data.revenueByCategory || [];
+const recentTransactions = data.recentTransactions || [];
+const paymentMethodsBreakdown = data.paymentMethodsBreakdown || [];
+const trends = data.trends || { revenue: 0, profit: 0 };
   const profitMargin = monthlyRevenue > 0 ? Math.round((netProfit / monthlyRevenue) * 100) : 0;
 
   return (
