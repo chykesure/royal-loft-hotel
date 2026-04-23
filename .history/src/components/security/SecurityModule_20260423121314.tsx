@@ -30,13 +30,12 @@ import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import {
   Search, Plus, RefreshCw, Shield, CheckCircle, AlertTriangle, Users,
-  FileText, Pencil, Trash2, Save, KeyRound, Lock, Eye, RotateCcw, Code,
-  Database, HardDrive, Upload, Download, Clock,
+  FileText, Pencil, Trash2, Save, KeyRound, Lock, LayoutGrid, ToggleLeft,
 } from 'lucide-react';
 import { formatDateTime } from '@/lib/auth';
-import { useAuthStore } from '@/store/auth-store';
-import { useRoleAccessStore, CONFIGURABLE_ROLES, ALL_MODULE_KEYS, type ConfigurableRole, type ModuleKey } from '@/store/role-access-store';
 import { toast } from 'sonner';
+import { useRoleAccessStore, type ModuleKey } from '@/store/role-access-store';
+
 
 interface User {
   id: string; email: string; name: string; phone?: string | null;
@@ -102,7 +101,6 @@ const MODULE_LABELS: Record<string, string> = {
   rooms: 'Rooms',
   guests: 'Guests',
   billing: 'Billing',
-  invoices: 'Invoices',           // FIX #2: was missing
   expenses: 'Expenses',
   accounts: 'Accounts',
   staff: 'Staff & Payroll',
@@ -115,10 +113,9 @@ const MODULE_LABELS: Record<string, string> = {
   developer_tools: 'Dev Tools',
 };
 
-// FIX #1: added 'invoices' — was missing
 const ALL_MODULES = [
   'dashboard', 'front_desk', 'reservations', 'rooms', 'guests',
-  'billing', 'invoices', 'expenses', 'accounts', 'staff', 'inventory', 'reports',
+  'billing', 'expenses', 'accounts', 'staff', 'inventory', 'reports',
   'rules', 'security', 'cloud', 'settings', 'developer_tools',
 ];
 
@@ -1335,9 +1332,8 @@ function ModuleAccessTab() {
     staff: 'bg-gray-100 text-gray-700',
   };
 
-  // FIX #3: only hide developer_tools — cloud and security are now configurable
   const VISIBLE_MODULES = ALL_MODULE_KEYS.filter(
-    (m) => m !== 'developer_tools'
+    (m) => m !== 'developer_tools' && m !== 'cloud' && m !== 'security'
   );
 
   return (
@@ -1382,7 +1378,7 @@ function ModuleAccessTab() {
           </div>
           <div className="flex-1">
             <p className="font-medium text-sm">Super Admin</p>
-            <p className="text-xs text-muted-foreground">All modules EXCEPT Developer Tools</p>
+            <p className="text-xs text-muted-foreground">All modules EXCEPT Cloud Storage &amp; Dev Tools</p>
           </div>
           <Badge className="bg-red-500 text-white text-[10px]">MOST MODULES</Badge>
         </div>
@@ -1459,9 +1455,9 @@ function ModuleAccessTab() {
         </div>
       </div>
 
-      {/* FIX #3b: corrected the note text */}
       <p className="text-xs text-muted-foreground px-1">
-        Note: Developer Tools are restricted to the Developer role only. All other modules can be granted to any configurable role.
+        Note: Cloud Storage and Developer Tools are restricted to the Developer role only and cannot be granted to other roles.
+        Security module access is controlled via the Permissions tab above.
       </p>
     </div>
   );

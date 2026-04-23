@@ -71,11 +71,11 @@ const DEFAULT_ACCESS: Record<ConfigurableRole, ModuleKey[]> = {
   ],
 };
 
-// Modules that can NEVER be toggled by configurable roles
-const BLOCKED_MODULES: ModuleKey[] = ['developer_tools'];
+// Modules that can NEVER be given to non-developer roles
+const BLOCKED_MODULES: ModuleKey[] = ['security', 'cloud', 'developer_tools'];
 
 // Modules available for configuration (excludes developer-only modules)
-export const VISIBLE_MODULE_KEYS: ModuleKey[] = ALL_MODULE_KEYS.filter(
+const CONFIGURABLE_MODULES: ModuleKey[] = ALL_MODULE_KEYS.filter(
   (m) => !BLOCKED_MODULES.includes(m)
 );
 
@@ -94,12 +94,11 @@ interface RoleAccessState {
   // Actions
   init: () => Promise<void>;
   canSee: (role: string, module: string) => boolean;
-  getModulesForRole: (role: string) => ModuleKey[];
   toggleModule: (role: ConfigurableRole, module: ModuleKey) => void;
   grantAll: (role: ConfigurableRole) => void;
   revokeAll: (role: ConfigurableRole) => void;
   resetToDefaults: () => void;
-  saveToServer: (role?: ConfigurableRole, modules?: string[]) => Promise<boolean>;
+  saveToServer: () => Promise<boolean>;
 }
 
 function toSet(modules: ModuleKey[]): Set<ModuleKey> {
@@ -137,9 +136,8 @@ export const useRoleAccessStore = create<RoleAccessState>((set, get) => ({
     try {
       const res = await fetch('/api/role-access');
       if (res.ok) {
-        // ── FIX: handle flat { role: string[] } response OR nested { accessMap: { role: string[] } } ──
         const data = await res.json();
-        const serverMap: Record<string, string[]> = data.accessMap || data;
+        const serverMap = data.accessMap as Record<string, string[]>;
 
         const newMap: Record<string, Set<ModuleKey>> = {};
         for (const role of CONFIGURABLE_ROLES) {
@@ -180,7 +178,7 @@ export const useRoleAccessStore = create<RoleAccessState>((set, get) => ({
     if (role === 'developer') return true;
 
     if (role === 'super_admin') {
-      return module !== 'developer_tools';
+      return module !== 'cloud' && module !== 'developer_tools';
     }
 
     if (CONFIGURABLE_ROLES.includes(role as ConfigurableRole)) {
@@ -189,16 +187,6 @@ export const useRoleAccessStore = create<RoleAccessState>((set, get) => ({
     }
 
     return false;
-  },
-
-  // ── Get modules for a role (returns array) ──
-  getModulesForRole: (role: string): ModuleKey[] => {
-    if (role === 'developer') return [...ALL_MODULE_KEYS];
-    if (role === 'super_admin') return ALL_MODULE_KEYS.filter(m => m !== 'developer_tools');
-    if (CONFIGURABLE_ROLES.includes(role as ConfigurableRole)) {
-      return Array.from(get().accessMap[role as ConfigurableRole]);
-    }
-    return [];
   },
 
   // ── Toggle a module for a role (UI only until saved) ──
@@ -219,7 +207,7 @@ export const useRoleAccessStore = create<RoleAccessState>((set, get) => ({
   // ── Grant all configurable modules to a role ──
   grantAll: (role: ConfigurableRole) => {
     const map = cloneMap(get().accessMap);
-    map[role] = toSet(VISIBLE_MODULE_KEYS);
+    map[role] = toSet(CONFIGURABLE_MODULES);
     set({ accessMap: map });
   },
 
@@ -242,67 +230,31 @@ export const useRoleAccessStore = create<RoleAccessState>((set, get) => ({
     });
   },
 
-  // ── Persist to server ──
-  // FIX: now sends { role, modules } per role — matches API validation
-  saveToServer: async (role?: ConfigurableRole, modules?: string[]): Promise<boolean> => {
+  // ── Persist current accessMap to server ──
+  saveToServer: async (): Promise<boolean> => {
     const state = get();
     if (state.isSaving) return false;
 
-    // ── Called with no args: save ALL configurable roles ──
-    if (!role || !modules) {
-      set({ isSaving: true });
-      try {
-        let allOk = true;
-        for (const r of CONFIGURABLE_ROLES) {
-          const mods = Array.from(state.accessMap[r]);
-          try {
-            const res = await fetch('/api/role-access', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ role: r, modules: mods }),
-            });
-            if (!res.ok) {
-              console.error(`Failed to save role access for ${r}`);
-              allOk = false;
-            }
-          } catch (err) {
-            console.error(`Error saving role access for ${r}:`, err);
-            allOk = false;
-          }
-        }
-        if (allOk) {
-          toast.success('Module access saved successfully');
-        } else {
-          toast.error('Some roles failed to save');
-        }
-        return allOk;
-      } finally {
-        set({ isSaving: false });
-      }
-    }
-
-    // ── Single role save ──
     set({ isSaving: true });
+
     try {
+      const serializable: Record<string, string[]> = {};
+      for (const role of CONFIGURABLE_ROLES) {
+        serializable[role] = Array.from(state.accessMap[role]);
+      }
+
       const res = await fetch('/api/role-access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, modules }),
+        body: JSON.stringify({ accessMap: serializable }),
       });
 
       if (res.ok) {
-        // Update local state for this role
-        set((s) => ({
-          accessMap: {
-            ...s.accessMap,
-            [role]: toSet(modules as ModuleKey[]),
-          },
-          isSaving: false,
-        }));
-        toast.success(`Access updated for ${role}`);
+        toast.success('Module access saved successfully');
+        set({ isSaving: false });
         return true;
       } else {
-        const err = await res.json().catch(() => ({}));
+        const err = await res.json();
         toast.error(err.error || 'Failed to save module access');
         set({ isSaving: false });
         return false;
