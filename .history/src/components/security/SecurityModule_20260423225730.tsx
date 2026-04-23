@@ -759,8 +759,7 @@ export function SecurityModule() {
                                     </AlertDialogFooter>
                                   </AlertDialogContent>
                                 </AlertDialog>
-                              )}
-                            </div>
+                          </div>
                           )}
                         </TableCell>
                       </TableRow>
@@ -1224,8 +1223,8 @@ export function SecurityModule() {
                       className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 text-sm"
                     >
                       <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${backup.type === 'auto'
-                        ? 'bg-blue-100'
-                        : 'bg-amber-100'
+                          ? 'bg-blue-100'
+                          : 'bg-amber-100'
                         }`}>
                         <Database className={`h-4 w-4 ${backup.type === 'auto' ? 'text-blue-600' : 'text-amber-600'
                           }`} />
@@ -1237,10 +1236,10 @@ export function SecurityModule() {
                           <Badge
                             variant="outline"
                             className={`text-[10px] px-1.5 py-0 h-4 ${backup.status === 'completed'
-                              ? 'border-emerald-300 text-emerald-700'
-                              : backup.status === 'failed'
-                                ? 'border-red-300 text-red-700'
-                                : ''
+                                ? 'border-emerald-300 text-emerald-700'
+                                : backup.status === 'failed'
+                                  ? 'border-red-300 text-red-700'
+                                  : ''
                               }`}
                           >
                             {backup.status}

@@ -636,35 +636,35 @@ export function SecurityModule() {
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={fetchData}><RefreshCw className="h-4 w-4" /></Button>
               {canManageUsers && (
-                <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"><Plus className="h-4 w-4 mr-1" /> Add User</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
-                    <div className="grid gap-4 py-2">
-                      <div className="grid gap-2"><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                      <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-                      <div className="grid gap-2"><Label>Password *</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                          <Label>Role</Label>
-                          <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {ROLE_OPTIONS.map(r => (
-                                <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="grid gap-2"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+              <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white"><Plus className="h-4 w-4 mr-1" /> Add User</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader><DialogTitle>Create User</DialogTitle></DialogHeader>
+                  <div className="grid gap-4 py-2">
+                    <div className="grid gap-2"><Label>Full Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                    <div className="grid gap-2"><Label>Email *</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+                    <div className="grid gap-2"><Label>Password *</Label><Input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label>Role</Label>
+                        <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {ROLE_OPTIONS.map(r => (
+                              <SelectItem key={r} value={r}>{r.replace(/_/g, ' ')}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <div className="grid gap-2"><Label>Department</Label><Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
-                      <Button onClick={handleCreateUser} className="bg-amber-500 hover:bg-amber-600 text-white">Create User</Button>
+                      <div className="grid gap-2"><Label>Phone</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
                     </div>
-                  </DialogContent>
-                </Dialog>
+                    <div className="grid gap-2"><Label>Department</Label><Input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></div>
+                    <Button onClick={handleCreateUser} className="bg-amber-500 hover:bg-amber-600 text-white">Create User</Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
               )}
             </div>
           </div>
@@ -721,46 +721,44 @@ export function SecurityModule() {
                         </TableCell>
                         <TableCell className="text-right">
                           {canManageUsers && (
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-8 w-8 text-muted-foreground hover:text-amber-600"
-                                onClick={() => handleEditUser(user)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              {user.role !== 'developer' && (
-                                <AlertDialog open={deletingUser?.id === user.id} onOpenChange={(open) => { if (!open) setDeletingUser(null); else setDeletingUser(user); }}>
-                                  <AlertDialogTrigger asChild>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="h-8 w-8 text-muted-foreground hover:text-red-600"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete User</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Are you sure you want to delete <span className="font-semibold">{user.name}</span>? This action cannot be undone. All associated data including sessions, staff profile, and audit logs references will be removed.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={handleDeleteUser}
-                                        className="bg-red-500 hover:bg-red-600 text-white"
-                                      >
-                                        Delete User
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              )}
-                            </div>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-muted-foreground hover:text-amber-600"
+                              onClick={() => handleEditUser(user)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <AlertDialog open={deletingUser?.id === user.id} onOpenChange={(open) => { if (!open) setDeletingUser(null); else setDeletingUser(user); }}>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete User</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete <span className="font-semibold">{user.name}</span>? This action cannot be undone. All associated data including sessions, staff profile, and audit logs references will be removed.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={handleDeleteUser}
+                                    className="bg-red-500 hover:bg-red-600 text-white"
+                                  >
+                                    Delete User
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                           )}
                         </TableCell>
                       </TableRow>
@@ -1223,12 +1221,14 @@ export function SecurityModule() {
                       key={backup.id}
                       className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 text-sm"
                     >
-                      <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${backup.type === 'auto'
-                        ? 'bg-blue-100'
-                        : 'bg-amber-100'
-                        }`}>
-                        <Database className={`h-4 w-4 ${backup.type === 'auto' ? 'text-blue-600' : 'text-amber-600'
-                          }`} />
+                      <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+                        backup.type === 'auto'
+                          ? 'bg-blue-100'
+                          : 'bg-amber-100'
+                      }`}>
+                        <Database className={`h-4 w-4 ${
+                          backup.type === 'auto' ? 'text-blue-600' : 'text-amber-600'
+                        }`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1236,12 +1236,13 @@ export function SecurityModule() {
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{backup.type}</Badge>
                           <Badge
                             variant="outline"
-                            className={`text-[10px] px-1.5 py-0 h-4 ${backup.status === 'completed'
-                              ? 'border-emerald-300 text-emerald-700'
-                              : backup.status === 'failed'
+                            className={`text-[10px] px-1.5 py-0 h-4 ${
+                              backup.status === 'completed'
+                                ? 'border-emerald-300 text-emerald-700'
+                                : backup.status === 'failed'
                                 ? 'border-red-300 text-red-700'
                                 : ''
-                              }`}
+                            }`}
                           >
                             {backup.status}
                           </Badge>
@@ -1259,26 +1260,17 @@ export function SecurityModule() {
                         <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-blue-600" onClick={() => handleDownloadBackup(backup)} title="Download">
                           <Download className="h-4 w-4" />
                         </Button>
-                        <AlertDialog open={restoreConfirm?.id === backup.id} onOpenChange={(open) => { if (!open) setRestoreConfirm(null); else setRestoreConfirm(backup); }}>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-emerald-600" title="Restore">
-                              <RotateCcw className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Restore Backup</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to restore from <span className="font-semibold">{backup.filename}</span>?
-                                This will replace ALL current data with the backup data. This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleRestoreBackup(backup)} className="bg-emerald-500 hover:bg-emerald-600 text-white">Restore Now</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                                                    {user.role !== 'developer' && (
+                            <AlertDialog open={deletingUser?.id === user.id} onOpenChange={(open) => { if (!open) setDeletingUser(null); else setDeletingUser(user); }}>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-red-600" title="Delete">
