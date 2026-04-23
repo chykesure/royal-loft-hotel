@@ -18,6 +18,7 @@ import { InvoicesModule } from '@/components/billing/InvoicesModule';
 import { SecurityModule } from '@/components/security/SecurityModule';
 import { ExpensesModule } from '@/components/expenses/ExpensesModule';
 import { FrontDeskModule } from '@/components/skeletons/FrontDeskModule';
+import { AccountsModule } from '@/components/skeletons/AccountsModule';
 import { AccountsModule } from '@/components/accounts/AccountsModule';
 import { StaffPayrollModule } from '@/components/skeletons/StaffPayrollModule';
 import { InventoryModule } from '@/components/skeletons/InventoryModule';
