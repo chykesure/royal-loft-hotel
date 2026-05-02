@@ -42,7 +42,6 @@ export async function GET(request: NextRequest) {
     }
 
     if (month) {
-      // Filter by YYYY-MM period
       const [yearStr, monthStr] = month.split('-');
       const year = parseInt(yearStr, 10);
       const m = parseInt(monthStr, 10);
@@ -62,9 +61,9 @@ export async function GET(request: NextRequest) {
     });
 
     // Calculate totals (support both amount and total fields)
-    const total = expenses.reduce((sum, e: any) => sum + (e.amount ?? e.total ?? 0), 0);
+    const total = expenses.reduce((sum, e) => sum + (e.amount ?? e.total ?? 0), 0);
     const monthTotal = await db.expense.aggregate({
-      _sum: { total: true } as any,
+      _sum: { total: true },
       where: {
         date: {
           gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -75,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     // Category breakdown
     const categoryMap = new Map<string, { amount: number; count: number }>();
-    for (const exp of expenses as any[]) {
+    for (const exp of expenses) {
       const cat = exp.category || 'miscellaneous';
       const amt = exp.amount ?? exp.total ?? 0;
       const existing = categoryMap.get(cat) || { amount: 0, count: 0 };
@@ -94,7 +93,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       expenses,
       total: Math.round(total * 100) / 100,
-      monthTotal: Math.round(((monthTotal as any)._sum?.total ?? 0) * 100) / 100,
+      monthTotal: Math.round((monthTotal._sum?.total ?? 0) * 100) / 100,
       categoryBreakdown,
     });
   } catch (error: unknown) {

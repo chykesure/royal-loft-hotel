@@ -212,48 +212,23 @@ export async function POST(request: NextRequest) {
     console.log(`Parsed: ${roomTypeRows.length} room_types, ${roomRows.length} rooms, ${customerRows.length} customers, ${bookingRows.length} bookings`);
 
     // ── Build lookup maps ──
-
-    // Room type price lookup: old room_type_id → price
     const roomTypePrices: Record<number, number> = {};
     for (const row of roomTypeRows) {
       const id = cleanInt(row[0]);
-      const price = cleanNum(row[2]); // room_type_id, room_type, price, max_person
+      const price = cleanNum(row[2]);
       roomTypePrices[id] = price;
     }
 
-    // Room mapping: old room_no → { roomNumber, price }
-    const roomMap: Record<string, { roomNumber: string; typePrice: number }> = {};
-    for (const row of roomRows) {
-      const roomNo = cleanStr(row[2]);
-      const typeId = cleanInt(row[1]);
-      const deleteStatus = cleanInt(row[6]);
-      if (deleteStatus === 1) continue;
-      roomMap[roomNo] = {
-        roomNumber: roomNo,
-        typePrice: roomTypePrices[typeId] || 0,
-      };
-    }
-
-    // Find matching rooms in our database
-    const dbRooms = await db.room.findMany({
-      include: { roomType: true },
-    });
+    const dbRooms = await db.room.findMany({ include: { roomType: true } });
     const roomNumberToDbId: Record<string, string> = {};
-    const roomNumberToRate: Record<string, number> = {};
     for (const rm of dbRooms) {
       roomNumberToDbId[rm.roomNumber] = rm.id;
-      roomNumberToRate[rm.roomNumber] = rm.roomType.baseRate;
     }
 
-    // Customer lookup: old customer_id → { name, phone, email, address }
     const customerMap: Record<number, { name: string; phone: string; email: string; address: string }> = {};
     for (const row of customerRows) {
       const id = cleanInt(row[0]);
-      const name = cleanStr(row[1]);
-      const phone = cleanStr(row[2]);
-      const email = cleanStr(row[3]);
-      const address = cleanStr(row[6]);
-      customerMap[id] = { name, phone, email, address };
+      customerMap[id] = { name: cleanStr(row[1]), phone: cleanStr(row[2]), email: cleanStr(row[3]), address: cleanStr(row[6]) };
     }
 
     // ── Import bookings ──
@@ -263,211 +238,159 @@ export async function POST(request: NextRequest) {
     let guestsMatched = 0;
     const errors: string[] = [];
 
-    // Track guest dedup by phone
     const phoneToGuestId: Map<string, string> = new Map();
-
-    // Pre-load existing guests for dedup
-    const existingGuests = await db.guest.findMany({
-      select: { id: true, phone: true },
-    });
+    const existingGuests = await db.guest.findMany({ select: { id: true, phone: true } });
     for (const g of existingGuests) {
       phoneToGuestId.set(g.phone, g.id);
     }
 
     // Track confirmation codes to avoid collisions
     const usedCodes = new Set<string>();
-
-    async function getUniqueConfirmationCode(): Promise<string> {
+    function newCode() {
       let code = generateConfirmationCode();
       let attempts = 0;
-      while (usedCodes.has(code) && attempts < 20) {
+      while (usedCodes.has(code) && attempts < 50) {
         code = generateConfirmationCode();
         attempts++;
-      }
-      const exists = await db.reservation.findUnique({ where: { confirmationCode: code } });
-      if (exists) {
-        code = generateConfirmationCode();
       }
       usedCodes.add(code);
       return code;
     }
 
-    for (let i = 0; i < bookingRows.length; i++) {
-      const row = bookingRows[i];
-      try {
-        // booking_id, customer_id, room_id, booking_date, check_in, check_out, total_price, discount, remaining_price, payment_status
-        const oldCustomerId = cleanInt(row[1]);
-        const oldRoomId = cleanInt(row[2]);
-        const checkInStr = cleanStr(row[4]);
-        const checkOutStr = cleanStr(row[5]);
-        const totalPrice = cleanNum(row[6]);
-        const discount = cleanNum(row[7]);
-        const paymentStatus = cleanInt(row[9]);
+    // ── Process in batches of 20 with transactions ──
+    const BATCH_SIZE = 20;
 
-        // Find room
-        const oldRoom = roomRows.find(r => cleanInt(r[0]) === oldRoomId);
-        if (!oldRoom) {
+    for (let batchStart = 0; batchStart < bookingRows.length; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, bookingRows.length);
+
+      const guestIncrements: Map<string, { stays: number; spent: number }> = new Map();
+      const batchOps: Array<{
+        guestId: string; dbRoomId: string; checkIn: Date; checkOut: Date;
+        netPaid: number; roomRate: number; totalPrice: number; discount: number;
+        paymentStatus: number; bookingNum: number;
+      }> = [];
+
+      // Phase 1: Validate and prepare
+      for (let i = batchStart; i < batchEnd; i++) {
+        const row = bookingRows[i];
+        try {
+          const oldCustomerId = cleanInt(row[1]);
+          const oldRoomId = cleanInt(row[2]);
+          const checkInStr = cleanStr(row[4]);
+          const checkOutStr = cleanStr(row[5]);
+          const totalPrice = cleanNum(row[6]);
+          const discount = cleanNum(row[7]);
+          const paymentStatus = cleanInt(row[9]);
+
+          const oldRoom = roomRows.find(r => cleanInt(r[0]) === oldRoomId);
+          if (!oldRoom) { skipped++; errors.push(`Booking ${i + 1}: Room ID ${oldRoomId} not found`); continue; }
+          const oldRoomNo = cleanStr(oldRoom[2]);
+          const dbRoomId = roomNumberToDbId[oldRoomNo];
+          if (!dbRoomId) { skipped++; errors.push(`Booking ${i + 1}: Room ${oldRoomNo} not in DB`); continue; }
+
+          const checkIn = parseFlexDate(checkInStr);
+          const checkOut = parseFlexDate(checkOutStr);
+          if (!checkIn || !checkOut) { skipped++; errors.push(`Booking ${i + 1}: Invalid dates`); continue; }
+
+          const netPaid = totalPrice - discount;
+          if (netPaid <= 0) { skipped++; errors.push(`Booking ${i + 1}: Zero net amount`); continue; }
+
+          const nights = Math.max(1, Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24)));
+          const roomRate = Math.round((netPaid / nights) * 100) / 100;
+
+          const oldCustomer = customerMap[oldCustomerId];
+          if (!oldCustomer) { skipped++; errors.push(`Booking ${i + 1}: Customer ${oldCustomerId} not found`); continue; }
+
+          const phone = oldCustomer.phone.replace(/[^0-9]/g, '');
+          if (phone.length < 5) { skipped++; errors.push(`Booking ${i + 1}: Invalid phone`); continue; }
+
+          let guestId = phoneToGuestId.get(phone);
+
+          if (!guestId) {
+            const nameParts = oldCustomer.name.trim().split(/\s+/);
+            const newGuest = await db.guest.create({
+              data: {
+                firstName: nameParts[0] || 'Unknown',
+                lastName: nameParts.length > 1 ? nameParts.slice(1).join(' ') : '',
+                phone,
+                email: oldCustomer.email && !['default@gmail.com', 'default@gmail'].includes(oldCustomer.email) ? oldCustomer.email : null,
+                address: oldCustomer.address && !['NOT ASSIGN', 'NOT ASSIGN '].includes(oldCustomer.address) ? oldCustomer.address : null,
+                totalStays: 1,
+                totalSpent: netPaid,
+                country: 'Nigeria',
+              },
+            });
+            guestId = newGuest.id;
+            phoneToGuestId.set(phone, guestId);
+            guestsCreated++;
+          } else {
+            const prev = guestIncrements.get(guestId) || { stays: 0, spent: 0 };
+            guestIncrements.set(guestId, { stays: prev.stays + 1, spent: prev.spent + netPaid });
+            guestsMatched++;
+          }
+
+          batchOps.push({ guestId, dbRoomId, checkIn, checkOut, netPaid, roomRate, totalPrice, discount, paymentStatus, bookingNum: cleanInt(row[0]) });
+        } catch (err: unknown) {
           skipped++;
-          errors.push(`Booking ${i + 1}: Room ID ${oldRoomId} not found in SQL`);
-          continue;
+          errors.push(`Booking ${i + 1}: ${err instanceof Error ? err.message : 'Unknown'}`);
         }
-        const oldRoomNo = cleanStr(oldRoom[2]);
-        const dbRoomId = roomNumberToDbId[oldRoomNo];
-
-        if (!dbRoomId) {
-          skipped++;
-          errors.push(`Booking ${i + 1}: Room ${oldRoomNo} not found in database`);
-          continue;
-        }
-
-        // Parse dates
-        const checkIn = parseFlexDate(checkInStr);
-        const checkOut = parseFlexDate(checkOutStr);
-        if (!checkIn || !checkOut) {
-          skipped++;
-          errors.push(`Booking ${i + 1}: Invalid dates: ${checkInStr} / ${checkOutStr}`);
-          continue;
-        }
-
-        // Net amount paid
-        const netPaid = totalPrice - discount;
-        if (netPaid <= 0) {
-          skipped++;
-          errors.push(`Booking ${i + 1}: Zero or negative net amount (total: ${totalPrice}, discount: ${discount})`);
-          continue;
-        }
-
-        // Calculate nights and room rate
-        const nightsMs = checkOut.getTime() - checkIn.getTime();
-        const nights = Math.max(1, Math.ceil(nightsMs / (1000 * 60 * 60 * 24)));
-        const roomRate = Math.round((netPaid / nights) * 100) / 100;
-
-        // ── Guest: find or create ──
-        const oldCustomer = customerMap[oldCustomerId];
-        if (!oldCustomer) {
-          skipped++;
-          errors.push(`Booking ${i + 1}: Customer ${oldCustomerId} not found`);
-          continue;
-        }
-
-        const phone = oldCustomer.phone.replace(/[^0-9]/g, '');
-        if (phone.length < 5) {
-          skipped++;
-          errors.push(`Booking ${i + 1}: Invalid phone ${phone}`);
-          continue;
-        }
-
-        let guestId = phoneToGuestId.get(phone);
-
-        if (!guestId) {
-          const nameParts = oldCustomer.name.trim().split(/\s+/);
-          const firstName = nameParts[0] || 'Unknown';
-          const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-
-          const newGuest = await db.guest.create({
-            data: {
-              firstName,
-              lastName,
-              phone,
-              email: oldCustomer.email && oldCustomer.email !== 'default@gmail.com' && oldCustomer.email !== 'default@gmail' ? oldCustomer.email : null,
-              address: oldCustomer.address && oldCustomer.address !== 'NOT ASSIGN' && oldCustomer.address !== 'NOT ASSIGN ' ? oldCustomer.address : null,
-              totalStays: 1,
-              totalSpent: netPaid,
-              country: 'Nigeria',
-            },
-          });
-          guestId = newGuest.id;
-          phoneToGuestId.set(phone, guestId);
-          guestsCreated++;
-        } else {
-          await db.guest.update({
-            where: { id: guestId },
-            data: {
-              totalStays: { increment: 1 },
-              totalSpent: { increment: netPaid },
-            },
-          });
-          guestsMatched++;
-        }
-
-        // ── Create Reservation ──
-        const confirmationCode = await getUniqueConfirmationCode();
-
-        const reservation = await db.reservation.create({
-          data: {
-            confirmationCode,
-            guestId,
-            roomId: dbRoomId,
-            checkIn,
-            checkOut,
-            status: 'checked_out',
-            source: 'imported',
-            adults: 1,
-            roomRate,
-            totalAmount: netPaid,
-            paidAmount: netPaid,
-            notes: `Imported from legacy system (Booking #${cleanInt(row[0])})`,
-            checkedOutAt: checkOut,
-          },
-        });
-
-        // ── Create Bill ──
-        const bill = await db.bill.create({
-          data: {
-            reservationId: reservation.id,
-            guestId,
-            roomCharges: totalPrice,
-            discountAmount: discount,
-            totalAmount: netPaid,
-            paidAmount: netPaid,
-            balanceAmount: 0,
-            status: paymentStatus === 1 ? 'paid' : 'open',
-            paymentMethod: 'cash',
-            paidAt: paymentStatus === 1 ? checkOut : null,
-          },
-        });
-
-        // ── Create Payment ──
-        await db.payment.create({
-          data: {
-            billId: bill.id,
-            amount: netPaid,
-            paymentMethod: 'cash',
-            notes: `Legacy import - Booking #${cleanInt(row[0])}`,
-          },
-        });
-
-        imported++;
-      } catch (err: unknown) {
-        skipped++;
-        const msg = err instanceof Error ? err.message : 'Unknown error';
-        errors.push(`Booking ${i + 1}: ${msg}`);
-        console.error(`Import error for booking row ${i + 1}:`, err);
       }
+
+      // Phase 2: Execute in a single transaction
+      if (batchOps.length > 0) {
+        await db.$transaction(async (tx) => {
+          for (const [gId, inc] of guestIncrements) {
+            await tx.guest.update({
+              where: { id: gId },
+              data: { totalStays: { increment: inc.stays }, totalSpent: { increment: inc.spent } },
+            });
+          }
+
+          for (const op of batchOps) {
+            const reservation = await tx.reservation.create({
+              data: {
+                confirmationCode: newCode(),
+                guestId: op.guestId, roomId: op.dbRoomId,
+                checkIn: op.checkIn, checkOut: op.checkOut,
+                status: 'checked_out', source: 'imported', adults: 1,
+                roomRate: op.roomRate, totalAmount: op.netPaid, paidAmount: op.netPaid,
+                notes: `Imported from legacy system (Booking #${op.bookingNum})`,
+                checkedOutAt: op.checkOut,
+              },
+            });
+
+            const bill = await tx.bill.create({
+              data: {
+                reservationId: reservation.id, guestId: op.guestId,
+                roomCharges: op.totalPrice, discountAmount: op.discount,
+                totalAmount: op.netPaid, paidAmount: op.netPaid, balanceAmount: 0,
+                status: op.paymentStatus === 1 ? 'paid' : 'open',
+                paymentMethod: 'cash', paidAt: op.paymentStatus === 1 ? op.checkOut : null,
+              },
+            });
+
+            await tx.payment.create({
+              data: { billId: bill.id, amount: op.netPaid, paymentMethod: 'cash', notes: `Legacy import - Booking #${op.bookingNum}` },
+            });
+
+            imported++;
+          }
+        }, { timeout: 120000 });
+      }
+
+      console.log(`Import progress: ${batchEnd}/${bookingRows.length}`);
     }
 
-    const totalRevenue = bookingRows.reduce((sum, row) => {
-      return sum + cleanNum(row[6]) - cleanNum(row[7]);
-    }, 0);
+    const totalRevenue = bookingRows.reduce((sum, row) => sum + cleanNum(row[6]) - cleanNum(row[7]), 0);
 
     return NextResponse.json({
-      success: true,
-      imported,
-      skipped,
-      total: bookingRows.length,
-      guestsCreated,
-      guestsMatched,
-      summary: {
-        totalRevenue,
-        bookingCount: imported,
-      },
+      success: true, imported, skipped, total: bookingRows.length,
+      guestsCreated, guestsMatched,
+      summary: { totalRevenue, bookingCount: imported },
       errors: errors.slice(0, 20),
     });
   } catch (error: unknown) {
     console.error('SQL Import error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to import SQL' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed to import SQL' }, { status: 500 });
   }
 }

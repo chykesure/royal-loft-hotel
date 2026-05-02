@@ -151,13 +151,13 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
     total: outstandingRecords.reduce((s: number, b: any) => s + (b.balanceAmount || 0), 0),
   };
 
-  // Grand totals (all-time) - using ?. for TS safety
+  // Grand totals
   const [grandRev, grandExp] = await Promise.all([
     db.bill.aggregate({ _sum: { totalAmount: true } }),
     db.expense.aggregate({ _sum: { amount: true, total: true } }),
-  ] as any);
-  const grandTotalRevenue = (grandRev as any)?._sum?.totalAmount || 0;
-  const grandTotalExpenses = ((grandExp as any)?._sum?.amount || 0) + ((grandExp as any)?._sum?.total || 0);
+  ] as any[]);
+  const grandTotalRevenue = grandRev._sum.totalAmount || 0;
+  const grandTotalExpenses = (grandExp._sum.amount || 0) + (grandExp._sum.total || 0);
   const grandTotalProfit = grandTotalRevenue - grandTotalExpenses;
 
   // Monthly expenses
@@ -250,16 +250,16 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
 
 // --- REVENUE DETAIL HANDLER ---
 async function handleRevenueDetail(from: Date, to: Date) {
-  // Grand total - using ?. for TS safety
+  // Grand total
   const grandRev = await db.bill.aggregate({ _sum: { totalAmount: true } } as any);
-  const grandTotal = (grandRev as any)?._sum?.totalAmount || 0;
+  const grandTotal = grandRev._sum.totalAmount || 0;
 
   // Current period bills
   const bills = await db.bill.findMany({
     where: { createdAt: { gte: from, lte: to } },
     include: {
       guest: { select: { firstName: true, lastName: true } },
-      reservation: { select: { checkIn: true, checkOut: true, room: { select: { roomNumber: true } } } },
+      reservation: { select: { checkIn: true, checkOut: true, roomNumber: true } },
       payments: { select: { amount: true, paymentMethod: true, createdAt: true } },
     },
     orderBy: { createdAt: 'desc' },
@@ -292,7 +292,7 @@ async function handleRevenueDetail(from: Date, to: Date) {
       totalPaid,
       status: b.status || 'open',
       createdAt: b.createdAt,
-      roomNumber: b.reservation?.room?.roomNumber || '-',
+      roomNumber: b.reservation?.roomNumber || '-',
       paymentMethods: methods,
     };
   });
@@ -320,9 +320,9 @@ async function handleRevenueDetail(from: Date, to: Date) {
 
 // --- EXPENSE DETAIL HANDLER ---
 async function handleExpenseDetail(from: Date, to: Date) {
-  // Grand total - using ?. for TS safety
+  // Grand total
   const grandExp = await db.expense.aggregate({ _sum: { amount: true, total: true } } as any);
-  const grandTotal = ((grandExp as any)?._sum?.amount || 0) + ((grandExp as any)?._sum?.total || 0);
+  const grandTotal = (grandExp._sum.amount || 0) + (grandExp._sum.total || 0);
 
   // Current period expenses
   const expenses = await db.expense.findMany({

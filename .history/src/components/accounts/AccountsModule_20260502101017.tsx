@@ -215,6 +215,7 @@ export function AccountsModule() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState('0');
 
+  // Date range for detail views
   const [dateFrom, setDateFrom] = useState(toLocalDateISO(getMonthRange(0).from));
   const [dateTo, setDateTo] = useState(toLocalDateISO(getMonthRange(0).to));
 
@@ -273,6 +274,7 @@ export function AccountsModule() {
     }
   }, []);
 
+  // --- Navigate to detail views ---
   const goToRevenueDetail = () => {
     const { from, to } = getMonthRange(parseInt(selectedMonth, 10) || 0);
     setDateFrom(toLocalDateISO(from));
@@ -287,6 +289,7 @@ export function AccountsModule() {
     setView('expenses');
   };
 
+  // --- Effect: fetch detail data when entering detail view or changing dates ---
   useEffect(() => {
     if (view === 'revenue') fetchRevenueDetail(dateFrom, dateTo);
     if (view === 'expenses') fetchExpenseDetail(dateFrom, dateTo);
@@ -295,6 +298,7 @@ export function AccountsModule() {
 
   const goToOverview = () => setView('overview');
 
+  // Month options
   const monthOptions = Array.from({ length: 12 }, (_, i) => ({
     value: String(-i),
     label: getMonthLabel(-i),
@@ -350,6 +354,7 @@ export function AccountsModule() {
 
         {/* ===== GRAND TOTAL HERO CARDS ===== */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Revenue Card */}
           <Card
             className="border-l-4 border-l-emerald-500 cursor-pointer hover:shadow-lg hover:border-l-emerald-600 transition-all duration-200 group"
             onClick={goToRevenueDetail}
@@ -374,6 +379,7 @@ export function AccountsModule() {
             </CardContent>
           </Card>
 
+          {/* Expenses Card */}
           <Card
             className="border-l-4 border-l-orange-500 cursor-pointer hover:shadow-lg hover:border-l-orange-600 transition-all duration-200 group"
             onClick={goToExpenseDetail}
@@ -398,6 +404,7 @@ export function AccountsModule() {
             </CardContent>
           </Card>
 
+          {/* Net Profit Card */}
           <Card className="border-l-4 border-l-amber-500">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-3">
@@ -643,6 +650,7 @@ export function AccountsModule() {
 
     return (
       <div className="flex flex-col gap-6 p-4 md:p-6">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={goToOverview} className="text-muted-foreground">
@@ -657,6 +665,7 @@ export function AccountsModule() {
           </div>
         </div>
 
+        {/* Date Range Filter */}
         <Card className="border-none shadow-sm">
           <CardContent className="p-4">
             <div className="flex flex-wrap items-end gap-4">
@@ -666,26 +675,43 @@ export function AccountsModule() {
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-xs text-muted-foreground">From</label>
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm" />
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                />
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-xs text-muted-foreground">To</label>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm" />
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                />
               </div>
-              <Button variant="outline" size="sm" onClick={() => {
-                const { from, to } = getMonthRange(parseInt(selectedMonth, 10) || 0);
-                setDateFrom(toLocalDateISO(from));
-                setDateTo(toLocalDateISO(to));
-              }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const { from, to } = getMonthRange(parseInt(selectedMonth, 10) || 0);
+                  setDateFrom(toLocalDateISO(from));
+                  setDateTo(toLocalDateISO(to));
+                }}
+              >
                 Reset to {getMonthLabel(parseInt(selectedMonth, 10) || 0)}
               </Button>
               <div className="ml-auto">
-                <span className="text-sm text-muted-foreground">{current.billCount} bill{current.billCount !== 1 ? 's' : ''} found</span>
+                <span className="text-sm text-muted-foreground">
+                  {current.billCount} bill{current.billCount !== 1 ? 's' : ''} found
+                </span>
               </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card className="border-l-4 border-l-emerald-500">
             <CardContent className="p-4">
@@ -697,7 +723,9 @@ export function AccountsModule() {
             <CardContent className="p-4">
               <p className="text-xs font-medium text-muted-foreground">Selected Period</p>
               <p className="text-xl font-bold text-blue-600 mt-1">{formatCurrency(current.total)}</p>
-              <p className="text-xs text-muted-foreground mt-1">{formatDate(current.from)} — {formatDate(current.to)}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {formatDate(current.from)} — {formatDate(current.to)}
+              </p>
             </CardContent>
           </Card>
           <Card className="border-l-4 border-l-gray-400">
@@ -712,13 +740,16 @@ export function AccountsModule() {
           </Card>
         </div>
 
+        {/* Side-by-Side Category Comparison */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card className="border-t-4 border-t-blue-500">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-blue-500" />
                 Selected Period Breakdown
-                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 text-[10px] ml-auto">{formatCurrency(current.total)}</Badge>
+                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 text-[10px] ml-auto">
+                  {formatCurrency(current.total)}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -748,7 +779,9 @@ export function AccountsModule() {
               <CardTitle className="text-base flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-gray-500" />
                 Previous Period Breakdown
-                <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100 text-[10px] ml-auto">{formatCurrency(previous.total)}</Badge>
+                <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100 text-[10px] ml-auto">
+                  {formatCurrency(previous.total)}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -774,6 +807,7 @@ export function AccountsModule() {
           </Card>
         </div>
 
+        {/* Bills Table */}
         <Card className="border-none shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
@@ -847,6 +881,7 @@ export function AccountsModule() {
 
     return (
       <div className="flex flex-col gap-6 p-4 md:p-6">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={goToOverview} className="text-muted-foreground">
@@ -861,6 +896,7 @@ export function AccountsModule() {
           </div>
         </div>
 
+        {/* Date Range Filter */}
         <Card className="border-none shadow-sm">
           <CardContent className="p-4">
             <div className="flex flex-wrap items-end gap-4">
@@ -870,26 +906,43 @@ export function AccountsModule() {
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-xs text-muted-foreground">From</label>
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm" />
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                />
               </div>
               <div className="flex items-center gap-2">
                 <label className="text-xs text-muted-foreground">To</label>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm" />
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                />
               </div>
-              <Button variant="outline" size="sm" onClick={() => {
-                const { from, to } = getMonthRange(parseInt(selectedMonth, 10) || 0);
-                setDateFrom(toLocalDateISO(from));
-                setDateTo(toLocalDateISO(to));
-              }}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const { from, to } = getMonthRange(parseInt(selectedMonth, 10) || 0);
+                  setDateFrom(toLocalDateISO(from));
+                  setDateTo(toLocalDateISO(to));
+                }}
+              >
                 Reset to {getMonthLabel(parseInt(selectedMonth, 10) || 0)}
               </Button>
               <div className="ml-auto">
-                <span className="text-sm text-muted-foreground">{current.expenseCount} expense{current.expenseCount !== 1 ? 's' : ''} found</span>
+                <span className="text-sm text-muted-foreground">
+                  {current.expenseCount} expense{current.expenseCount !== 1 ? 's' : ''} found
+                </span>
               </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card className="border-l-4 border-l-orange-500">
             <CardContent className="p-4">
@@ -901,7 +954,9 @@ export function AccountsModule() {
             <CardContent className="p-4">
               <p className="text-xs font-medium text-muted-foreground">Selected Period</p>
               <p className="text-xl font-bold text-blue-600 mt-1">{formatCurrency(current.total)}</p>
-              <p className="text-xs text-muted-foreground mt-1">{formatDate(current.from)} — {formatDate(current.to)}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {formatDate(current.from)} — {formatDate(current.to)}
+              </p>
             </CardContent>
           </Card>
           <Card className="border-l-4 border-l-gray-400">
@@ -917,13 +972,16 @@ export function AccountsModule() {
           </Card>
         </div>
 
+        {/* Side-by-Side Category Comparison */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card className="border-t-4 border-t-blue-500">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Tag className="h-4 w-4 text-blue-500" />
                 Selected Period by Category
-                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 text-[10px] ml-auto">{formatCurrency(current.total)}</Badge>
+                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 text-[10px] ml-auto">
+                  {formatCurrency(current.total)}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -953,7 +1011,9 @@ export function AccountsModule() {
               <CardTitle className="text-base flex items-center gap-2">
                 <Tag className="h-4 w-4 text-gray-500" />
                 Previous Period by Category
-                <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100 text-[10px] ml-auto">{formatCurrency(previous.total)}</Badge>
+                <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100 text-[10px] ml-auto">
+                  {formatCurrency(previous.total)}
+                </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -979,6 +1039,7 @@ export function AccountsModule() {
           </Card>
         </div>
 
+        {/* Expenses Table */}
         <Card className="border-none shadow-sm">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">

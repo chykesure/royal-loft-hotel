@@ -104,7 +104,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const view = searchParams.get('view') || 'overview';
 
-    // Parse date range
     const fromParam = searchParams.get('from');
     const toParam = searchParams.get('to');
 
@@ -131,17 +130,14 @@ export async function GET(request: NextRequest) {
 async function handleOverview(monthStart: Date, monthEnd: Date) {
   const currentPeriod = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`;
 
-  // Monthly revenue
   const monthlyBills = await db.bill.findMany({
     where: { createdAt: { gte: monthStart, lte: monthEnd } },
     select: { totalAmount: true, roomCharges: true, foodCharges: true, barCharges: true, spaCharges: true, laundryCharges: true, otherCharges: true },
   } as any);
   const monthlyRevenue = monthlyBills.reduce((s: number, b: any) => s + (b.totalAmount || 0), 0);
 
-  // Revenue by category
   const revenueByCategory = computeRevenueCategories(monthlyBills);
 
-  // Outstanding
   const outstandingRecords = await db.bill.findMany({
     where: { status: { in: ['open', 'partially_paid'] } },
     select: { balanceAmount: true },
@@ -151,7 +147,6 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
     total: outstandingRecords.reduce((s: number, b: any) => s + (b.balanceAmount || 0), 0),
   };
 
-  // Grand totals (all-time) - using ?. for TS safety
   const [grandRev, grandExp] = await Promise.all([
     db.bill.aggregate({ _sum: { totalAmount: true } }),
     db.expense.aggregate({ _sum: { amount: true, total: true } }),
@@ -160,14 +155,12 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
   const grandTotalExpenses = ((grandExp as any)?._sum?.amount || 0) + ((grandExp as any)?._sum?.total || 0);
   const grandTotalProfit = grandTotalRevenue - grandTotalExpenses;
 
-  // Monthly expenses
   const monthlyExpRecords = await db.expense.findMany({
     where: { date: { gte: monthStart, lte: monthEnd } },
     select: { amount: true, total: true },
   } as any);
   const totalExpenses = monthlyExpRecords.reduce((s: number, e: any) => s + (e.amount || e.total || 0), 0);
 
-  // Monthly payroll
   let monthlyPayroll = 0;
   try {
     const payRecords = await db.payrollRecord.findMany({ where: { period: currentPeriod }, select: { netPay: true } } as any);
@@ -176,7 +169,6 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
 
   const netProfit = monthlyRevenue - totalExpenses - monthlyPayroll;
 
-  // Trends
   const prevStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
   const prevEnd = new Date(monthStart.getFullYear(), monthStart.getMonth(), 0, 23, 59, 59, 999);
   const prevPeriod = `${prevStart.getFullYear()}-${String(prevStart.getMonth() + 1).padStart(2, '0')}`;
@@ -198,7 +190,6 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
     if (prevProfit !== 0) trends.profit = Math.round(((netProfit - prevProfit) / Math.abs(prevProfit)) * 100);
   } catch { /* trends stay at 0 */ }
 
-  // Recent transactions
   const recentPayments = await db.payment.findMany({
     take: 20,
     orderBy: { createdAt: 'desc' },
@@ -250,16 +241,14 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
 
 // --- REVENUE DETAIL HANDLER ---
 async function handleRevenueDetail(from: Date, to: Date) {
-  // Grand total - using ?. for TS safety
   const grandRev = await db.bill.aggregate({ _sum: { totalAmount: true } } as any);
   const grandTotal = (grandRev as any)?._sum?.totalAmount || 0;
 
-  // Current period bills
   const bills = await db.bill.findMany({
     where: { createdAt: { gte: from, lte: to } },
     include: {
       guest: { select: { firstName: true, lastName: true } },
-      reservation: { select: { checkIn: true, checkOut: true, room: { select: { roomNumber: true } } } },
+      reservation: { select: { checkIn: true, checkOut: true, roomNumber: true } },
       payments: { select: { amount: true, paymentMethod: true, createdAt: true } },
     },
     orderBy: { createdAt: 'desc' },
@@ -268,7 +257,6 @@ async function handleRevenueDetail(from: Date, to: Date) {
   const currentTotal = bills.reduce((s: number, b: any) => s + (b.totalAmount || 0), 0);
   const currentCategories = computeRevenueCategories(bills);
 
-  // Previous period
   const { prevStart, prevEnd } = getPreviousPeriod(from, to);
   const prevBills = await db.bill.findMany({
     where: { createdAt: { gte: prevStart, lte: prevEnd } },
@@ -279,7 +267,6 @@ async function handleRevenueDetail(from: Date, to: Date) {
 
   const change = prevTotal > 0 ? Math.round(((currentTotal - prevTotal) / prevTotal) * 100) : 0;
 
-  // Format bills for frontend
   const formattedBills = bills.map((b: any) => {
     const guestName = b.guest ? `${b.guest.firstName} ${b.guest.lastName}` : 'Walk-in';
     const totalPaid = (b.payments || []).reduce((s: number, p: any) => s + (p.amount || 0), 0);
@@ -292,7 +279,7 @@ async function handleRevenueDetail(from: Date, to: Date) {
       totalPaid,
       status: b.status || 'open',
       createdAt: b.createdAt,
-      roomNumber: b.reservation?.room?.roomNumber || '-',
+      roomNumber: b.reservation?.roomNumber || '-',
       paymentMethods: methods,
     };
   });
@@ -320,11 +307,9 @@ async function handleRevenueDetail(from: Date, to: Date) {
 
 // --- EXPENSE DETAIL HANDLER ---
 async function handleExpenseDetail(from: Date, to: Date) {
-  // Grand total - using ?. for TS safety
   const grandExp = await db.expense.aggregate({ _sum: { amount: true, total: true } } as any);
   const grandTotal = ((grandExp as any)?._sum?.amount || 0) + ((grandExp as any)?._sum?.total || 0);
 
-  // Current period expenses
   const expenses = await db.expense.findMany({
     where: { date: { gte: from, lte: to } },
     orderBy: { date: 'desc' },
@@ -332,7 +317,6 @@ async function handleExpenseDetail(from: Date, to: Date) {
 
   const currentTotal = expenses.reduce((s: number, e: any) => s + (e.amount || e.total || 0), 0);
 
-  // Category breakdown for current period
   const catMapCurrent: Record<string, number> = {};
   for (const e of expenses) {
     const cat = (e.category || 'miscellaneous').toLowerCase();
@@ -346,7 +330,6 @@ async function handleExpenseDetail(from: Date, to: Date) {
     }))
     .sort((a, b) => b.amount - a.amount);
 
-  // Previous period
   const { prevStart, prevEnd } = getPreviousPeriod(from, to);
   const prevExpenses = await db.expense.findMany({
     where: { date: { gte: prevStart, lte: prevEnd } },
@@ -369,7 +352,6 @@ async function handleExpenseDetail(from: Date, to: Date) {
 
   const change = prevTotal > 0 ? Math.round(((currentTotal - prevTotal) / prevTotal) * 100) : 0;
 
-  // Format expenses for frontend
   const formattedExpenses = expenses.map((e: any) => ({
     id: e.id,
     name: e.name || e.description || e.category || 'Expense',

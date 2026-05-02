@@ -591,6 +591,7 @@ model RoleModuleAccess {
 
 // ============ EXPENSES ============
 
+
 model Expense {
   id          String   @id @default(cuid())
   date        DateTime

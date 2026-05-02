@@ -27,7 +27,7 @@ function parseInsertRows(sql: string, tableName: string): string[][] {
   const rows: string[][] = [];
   const escaped = tableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(
-    `INSERT\\s+INTO\\s+\\\`${escaped}\\\`[^V]*VALUES\\s*([^;]+);`,
+    `INSERT\\s+INTO\\s+(?:\\\`${escaped}\\\`|\\b${escaped}\\b)[^V]*VALUES\\s*([^;]+);`,
     'gi'
   );
 
@@ -47,6 +47,7 @@ function parseInsertRows(sql: string, tableName: string): string[][] {
   return rows;
 }
 
+// Split value rows by '),(' handling quoted strings
 function splitValueRows(str: string): string[] {
   const rows: string[] = [];
   let depth = 0;
@@ -87,6 +88,7 @@ function splitValueRows(str: string): string[] {
   return rows;
 }
 
+// Parse individual fields — closing quote NOT added to value
 function parseRowFields(row: string): string[] {
   const fields: string[] = [];
   let current = '';
@@ -97,7 +99,6 @@ function parseRowFields(row: string): string[] {
     const ch = row[i];
 
     if (inString) {
-      current += ch;
       if (ch === stringChar) {
         if (row[i + 1] === stringChar) {
           current += ch;
@@ -105,8 +106,10 @@ function parseRowFields(row: string): string[] {
         } else {
           inString = false;
         }
+      } else {
+        current += ch;
       }
-    } else if (ch === "'" || ch === '"') {
+    } else if (ch === "'" || ch === '"' || ch === '`') {
       inString = true;
       stringChar = ch;
     } else if (ch === ',') {
@@ -144,12 +147,20 @@ function parseFlexDate(dateStr: string): Date | null {
   return null;
 }
 
+// Clean a SQL string value (remove surrounding quotes, unescape)
 function cleanStr(val: string): string {
   if (!val) return '';
   val = val.trim();
-  if ((val.startsWith("'") && val.endsWith("'")) || (val.startsWith('"') && val.endsWith('"'))) {
-    val = val.slice(1, -1);
+  let prev = '';
+  while (prev !== val) {
+    prev = val;
+    if ((val.startsWith("'") && val.endsWith("'")) ||
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith('`') && val.endsWith('`'))) {
+      val = val.slice(1, -1).trim();
+    }
   }
+  val = val.replace(/^['"`]+/, '').replace(/['"`]+$/, '');
   val = val.replace(/\\'/g, "'").replace(/''/g, "'");
   val = val.replace(/\\"/g, '"').replace(/""/g, '"');
   val = val.replace(/\\n/g, '').replace(/\n/g, '').trim();
@@ -211,33 +222,57 @@ export async function POST(request: NextRequest) {
 
     console.log(`Parsed: ${roomTypeRows.length} room_types, ${roomRows.length} rooms, ${customerRows.length} customers, ${bookingRows.length} bookings`);
 
-    // ── Build lookup maps ──
-
-    // Room type price lookup: old room_type_id → price
-    const roomTypePrices: Record<number, number> = {};
+    // ── Step 1: Build room type info from legacy SQL ──
+    const legacyRoomTypes: Record<number, { name: string; price: number; maxPerson: number }> = {};
     for (const row of roomTypeRows) {
       const id = cleanInt(row[0]);
-      const price = cleanNum(row[2]); // room_type_id, room_type, price, max_person
-      roomTypePrices[id] = price;
+      const name = cleanStr(row[1]);
+      const price = cleanNum(row[2]);
+      const maxPerson = cleanInt(row[3]);
+      if (id && name) legacyRoomTypes[id] = { name, price, maxPerson };
     }
 
-    // Room mapping: old room_no → { roomNumber, price }
-    const roomMap: Record<string, { roomNumber: string; typePrice: number }> = {};
+    // ── Step 2: Ensure room types exist in DB (create if missing) ──
+    const dbRoomTypes = await db.roomType.findMany();
+    const roomTypeNameToId: Record<string, string> = {};
+    for (const rt of dbRoomTypes) {
+      roomTypeNameToId[rt.name.toLowerCase()] = rt.id;
+    }
+
+    let roomTypesCreated = 0;
+    for (const [legacyId, lt] of Object.entries(legacyRoomTypes)) {
+      const key = lt.name.toLowerCase();
+      if (!roomTypeNameToId[key]) {
+        const created = await db.roomType.create({
+          data: {
+            name: lt.name,
+            baseRate: lt.price,
+            maxOccupancy: lt.maxPerson || 2,
+            description: `Imported from legacy system (type #${legacyId})`,
+            isActive: true,
+          },
+        });
+        roomTypeNameToId[key] = created.id;
+        roomTypesCreated++;
+        console.log(`Created room type: ${lt.name} (₦${lt.price})`);
+      }
+    }
+
+    // ── Step 3: Build legacy room map (skip deleted) ──
+    const legacyRooms: Record<number, { roomNo: string; typeId: number; deleted: boolean }> = {};
     for (const row of roomRows) {
-      const roomNo = cleanStr(row[2]);
+      const id = cleanInt(row[0]);
       const typeId = cleanInt(row[1]);
-      const deleteStatus = cleanInt(row[6]);
-      if (deleteStatus === 1) continue;
-      roomMap[roomNo] = {
-        roomNumber: roomNo,
-        typePrice: roomTypePrices[typeId] || 0,
-      };
+      const roomNo = cleanStr(row[2]);
+      const deleted = cleanInt(row[6]) === 1;
+      if (!id || !roomNo) continue;
+      if (!deleted || !legacyRooms[id]) {
+        legacyRooms[id] = { roomNo, typeId, deleted };
+      }
     }
 
-    // Find matching rooms in our database
-    const dbRooms = await db.room.findMany({
-      include: { roomType: true },
-    });
+    // ── Step 4: Ensure rooms exist in DB (create if missing) ──
+    const dbRooms = await db.room.findMany({ include: { roomType: true } });
     const roomNumberToDbId: Record<string, string> = {};
     const roomNumberToRate: Record<string, number> = {};
     for (const rm of dbRooms) {
@@ -245,7 +280,35 @@ export async function POST(request: NextRequest) {
       roomNumberToRate[rm.roomNumber] = rm.roomType.baseRate;
     }
 
-    // Customer lookup: old customer_id → { name, phone, email, address }
+    let roomsCreated = 0;
+    for (const [legacyId, lr] of Object.entries(legacyRooms)) {
+      if (lr.deleted) continue;
+      if (roomNumberToDbId[lr.roomNo]) continue;
+
+      const lt = legacyRoomTypes[lr.typeId];
+      const typeId = lt ? roomTypeNameToId[lt.name.toLowerCase()] : null;
+
+      if (!typeId) {
+        console.log(`Skipping room ${lr.roomNo}: no matching room type for legacy type #${lr.typeId}`);
+        continue;
+      }
+
+      const created = await db.room.create({
+        data: {
+          roomNumber: lr.roomNo,
+          floor: 1,
+          roomTypeId: typeId,
+          status: 'available',
+          notes: 'Imported from legacy system',
+        },
+      });
+      roomNumberToDbId[lr.roomNo] = created.id;
+      roomNumberToRate[lr.roomNo] = lt.price;
+      roomsCreated++;
+      console.log(`Created room: ${lr.roomNo} (type: ${lt?.name})`);
+    }
+
+    // ── Step 5: Build customer lookup ──
     const customerMap: Record<number, { name: string; phone: string; email: string; address: string }> = {};
     for (const row of customerRows) {
       const id = cleanInt(row[0]);
@@ -253,20 +316,19 @@ export async function POST(request: NextRequest) {
       const phone = cleanStr(row[2]);
       const email = cleanStr(row[3]);
       const address = cleanStr(row[6]);
-      customerMap[id] = { name, phone, email, address };
+      if (id) customerMap[id] = { name, phone, email, address };
     }
 
-    // ── Import bookings ──
+    // ── Step 6: Import bookings (NO transactions — safe for pgbouncer / Supabase) ──
     let imported = 0;
     let skipped = 0;
+    let duplicates = 0;
     let guestsCreated = 0;
     let guestsMatched = 0;
     const errors: string[] = [];
 
-    // Track guest dedup by phone
+    // Guest dedup by phone
     const phoneToGuestId: Map<string, string> = new Map();
-
-    // Pre-load existing guests for dedup
     const existingGuests = await db.guest.findMany({
       select: { id: true, phone: true },
     });
@@ -274,28 +336,38 @@ export async function POST(request: NextRequest) {
       phoneToGuestId.set(g.phone, g.id);
     }
 
-    // Track confirmation codes to avoid collisions
-    const usedCodes = new Set<string>();
+    // Duplicate detection: check which legacy booking IDs were already imported
+    const existingImported = await db.reservation.findMany({
+      where: { source: 'imported' },
+      select: { notes: true },
+    });
+    const importedBookingNums = new Set<string>();
+    for (const r of existingImported) {
+      const match = r.notes?.match(/Booking #(\d+)/);
+      if (match) importedBookingNums.add(match[1]);
+    }
+    console.log(`Found ${importedBookingNums.size} already-imported bookings in DB`);
 
-    async function getUniqueConfirmationCode(): Promise<string> {
+    // Confirmation code collision avoidance
+    const usedCodes = new Set<string>();
+    function newCode() {
       let code = generateConfirmationCode();
       let attempts = 0;
-      while (usedCodes.has(code) && attempts < 20) {
+      while (usedCodes.has(code) && attempts < 50) {
         code = generateConfirmationCode();
         attempts++;
-      }
-      const exists = await db.reservation.findUnique({ where: { confirmationCode: code } });
-      if (exists) {
-        code = generateConfirmationCode();
       }
       usedCodes.add(code);
       return code;
     }
 
+    // Small delay helper to avoid connection pool exhaustion
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Process one booking at a time (no transaction wrapper)
     for (let i = 0; i < bookingRows.length; i++) {
       const row = bookingRows[i];
       try {
-        // booking_id, customer_id, room_id, booking_date, check_in, check_out, total_price, discount, remaining_price, payment_status
         const oldCustomerId = cleanInt(row[1]);
         const oldRoomId = cleanInt(row[2]);
         const checkInStr = cleanStr(row[4]);
@@ -303,20 +375,27 @@ export async function POST(request: NextRequest) {
         const totalPrice = cleanNum(row[6]);
         const discount = cleanNum(row[7]);
         const paymentStatus = cleanInt(row[9]);
+        const bookingNum = cleanInt(row[0]);
 
-        // Find room
-        const oldRoom = roomRows.find(r => cleanInt(r[0]) === oldRoomId);
-        if (!oldRoom) {
-          skipped++;
-          errors.push(`Booking ${i + 1}: Room ID ${oldRoomId} not found in SQL`);
+        // Skip already-imported bookings
+        if (importedBookingNums.has(String(bookingNum))) {
+          duplicates++;
           continue;
         }
-        const oldRoomNo = cleanStr(oldRoom[2]);
-        const dbRoomId = roomNumberToDbId[oldRoomNo];
 
+        // Find room from legacy data
+        const legacyRoom = legacyRooms[oldRoomId];
+        if (!legacyRoom || legacyRoom.deleted) {
+          skipped++;
+          errors.push(`Booking ${i + 1}: Room ID ${oldRoomId} not found or deleted`);
+          continue;
+        }
+
+        // Find room in DB
+        const dbRoomId = roomNumberToDbId[legacyRoom.roomNo];
         if (!dbRoomId) {
           skipped++;
-          errors.push(`Booking ${i + 1}: Room ${oldRoomNo} not found in database`);
+          errors.push(`Booking ${i + 1}: Room ${legacyRoom.roomNo} not in DB`);
           continue;
         }
 
@@ -325,24 +404,22 @@ export async function POST(request: NextRequest) {
         const checkOut = parseFlexDate(checkOutStr);
         if (!checkIn || !checkOut) {
           skipped++;
-          errors.push(`Booking ${i + 1}: Invalid dates: ${checkInStr} / ${checkOutStr}`);
+          errors.push(`Booking ${i + 1}: Invalid dates (${checkInStr} / ${checkOutStr})`);
           continue;
         }
 
-        // Net amount paid
         const netPaid = totalPrice - discount;
         if (netPaid <= 0) {
           skipped++;
-          errors.push(`Booking ${i + 1}: Zero or negative net amount (total: ${totalPrice}, discount: ${discount})`);
+          errors.push(`Booking ${i + 1}: Zero net amount`);
           continue;
         }
 
-        // Calculate nights and room rate
         const nightsMs = checkOut.getTime() - checkIn.getTime();
         const nights = Math.max(1, Math.ceil(nightsMs / (1000 * 60 * 60 * 24)));
         const roomRate = Math.round((netPaid / nights) * 100) / 100;
 
-        // ── Guest: find or create ──
+        // Find customer
         const oldCustomer = customerMap[oldCustomerId];
         if (!oldCustomer) {
           skipped++;
@@ -350,13 +427,15 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        // Clean phone
         const phone = oldCustomer.phone.replace(/[^0-9]/g, '');
         if (phone.length < 5) {
           skipped++;
-          errors.push(`Booking ${i + 1}: Invalid phone ${phone}`);
+          errors.push(`Booking ${i + 1}: Invalid phone`);
           continue;
         }
 
+        // Find or create guest
         let guestId = phoneToGuestId.get(phone);
 
         if (!guestId) {
@@ -369,8 +448,8 @@ export async function POST(request: NextRequest) {
               firstName,
               lastName,
               phone,
-              email: oldCustomer.email && oldCustomer.email !== 'default@gmail.com' && oldCustomer.email !== 'default@gmail' ? oldCustomer.email : null,
-              address: oldCustomer.address && oldCustomer.address !== 'NOT ASSIGN' && oldCustomer.address !== 'NOT ASSIGN ' ? oldCustomer.address : null,
+              email: oldCustomer.email && !['default@gmail.com', 'default@gmail'].includes(oldCustomer.email) ? oldCustomer.email : null,
+              address: oldCustomer.address && !['NOT ASSIGN', 'NOT ASSIGN '].includes(oldCustomer.address) ? oldCustomer.address : null,
               totalStays: 1,
               totalSpent: netPaid,
               country: 'Nigeria',
@@ -380,6 +459,7 @@ export async function POST(request: NextRequest) {
           phoneToGuestId.set(phone, guestId);
           guestsCreated++;
         } else {
+          // Update existing guest totals
           await db.guest.update({
             where: { id: guestId },
             data: {
@@ -390,12 +470,11 @@ export async function POST(request: NextRequest) {
           guestsMatched++;
         }
 
-        // ── Create Reservation ──
-        const confirmationCode = await getUniqueConfirmationCode();
-
+        // Create reservation (individual — no transaction)
+        const code = newCode();
         const reservation = await db.reservation.create({
           data: {
-            confirmationCode,
+            confirmationCode: code,
             guestId,
             roomId: dbRoomId,
             checkIn,
@@ -406,12 +485,12 @@ export async function POST(request: NextRequest) {
             roomRate,
             totalAmount: netPaid,
             paidAmount: netPaid,
-            notes: `Imported from legacy system (Booking #${cleanInt(row[0])})`,
+            notes: `Imported from legacy system (Booking #${bookingNum})`,
             checkedOutAt: checkOut,
           },
         });
 
-        // ── Create Bill ──
+        // Create bill
         const bill = await db.bill.create({
           data: {
             reservationId: reservation.id,
@@ -427,24 +506,37 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // ── Create Payment ──
+        // Create payment
         await db.payment.create({
           data: {
             billId: bill.id,
             amount: netPaid,
             paymentMethod: 'cash',
-            notes: `Legacy import - Booking #${cleanInt(row[0])}`,
+            notes: `Legacy import - Booking #${bookingNum}`,
           },
         });
 
         imported++;
+        importedBookingNums.add(String(bookingNum));
+
+        // Log progress every 20 bookings
+        if (imported % 20 === 0) {
+          console.log(`Progress: ${imported} imported, ${i + 1}/${bookingRows.length} processed`);
+        }
+
+        // Small pause every 10 bookings to avoid overwhelming the DB connection pool
+        if (imported % 10 === 0) {
+          await delay(200);
+        }
       } catch (err: unknown) {
         skipped++;
         const msg = err instanceof Error ? err.message : 'Unknown error';
         errors.push(`Booking ${i + 1}: ${msg}`);
-        console.error(`Import error for booking row ${i + 1}:`, err);
+        console.error(`Error on booking row ${i + 1}:`, msg);
       }
     }
+
+    console.log(`Import complete: ${imported} imported, ${skipped} skipped, ${duplicates} duplicates`);
 
     const totalRevenue = bookingRows.reduce((sum, row) => {
       return sum + cleanNum(row[6]) - cleanNum(row[7]);
@@ -454,9 +546,12 @@ export async function POST(request: NextRequest) {
       success: true,
       imported,
       skipped,
+      duplicates,
       total: bookingRows.length,
       guestsCreated,
       guestsMatched,
+      roomTypesCreated,
+      roomsCreated,
       summary: {
         totalRevenue,
         bookingCount: imported,

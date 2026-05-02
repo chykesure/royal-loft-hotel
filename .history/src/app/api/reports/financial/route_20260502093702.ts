@@ -59,21 +59,21 @@ export async function GET(request: NextRequest) {
     const outstandingTotal = outstandingBills.reduce((sum, b) => sum + b.balanceAmount, 0);
 
     // ===== EXPENSES =====
+    // NOTE: If your Expense model uses 'expenseDate' instead of 'date',
+    // change the line below from { date: ... } to { expenseDate: ... }
     const expenses = await db.expense.findMany({
       where: { date: { gte: fromDate, lte: toDate } },
     });
 
-    const expensesTotal = expenses.reduce((sum, e) => sum + (e.amount || e.total || 0), 0);
+    const expensesTotal = expenses.reduce((sum: any, e: any) => sum + (e.amount || e.total || 0), 0);
 
     const categoryMap: Record<string, { amount: number; count: number }> = {};
-    for (const exp of expenses as any[]) {
-      const cat = exp.category || 'miscellaneous';
-      const amt = exp.amount || exp.total || 0;
-      if (!categoryMap[cat]) {
-        categoryMap[cat] = { amount: 0, count: 0 };
+    for (const exp of expenses) {
+      if (!categoryMap[exp.category]) {
+        categoryMap[exp.category] = { amount: 0, count: 0 };
       }
-      categoryMap[cat].amount += amt;
-      categoryMap[cat].count += 1;
+      categoryMap[exp.category].amount += exp.amount;
+      categoryMap[exp.category].count += 1;
     }
     const expensesByCategory = Object.entries(categoryMap)
       .map(([category, data]) => ({
@@ -84,7 +84,6 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => b.amount - a.amount);
 
     // ===== PAYROLL =====
-    // Match payroll by period (YYYY-MM) that falls within the from/to date range
     const allPayroll = await db.payrollRecord.findMany({
       include: { staff: { select: { department: true } } },
     });
@@ -118,7 +117,6 @@ export async function GET(request: NextRequest) {
     // ===== MONTHLY BREAKDOWN =====
     const monthlyMap: Record<string, { revenue: number; expenses: number; payroll: number }> = {};
 
-    // Revenue by month from bills
     for (const bill of bills as any[]) {
       const billDate = new Date(bill.createdAt);
       const key = `${billDate.getFullYear()}-${String(billDate.getMonth() + 1).padStart(2, '0')}`;
@@ -126,7 +124,7 @@ export async function GET(request: NextRequest) {
       monthlyMap[key].revenue += bill.totalAmount;
     }
 
-    // Expenses by month
+    // NOTE: If your Expense model uses 'expenseDate', change exp.date to exp.expenseDate
     for (const exp of expenses as any[]) {
       const expDate = new Date(exp.date);
       const key = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}`;
@@ -134,14 +132,12 @@ export async function GET(request: NextRequest) {
       monthlyMap[key].expenses += exp.amount;
     }
 
-    // Payroll by month (period is already YYYY-MM)
     for (const pr of filteredPayroll as any[]) {
       const key = pr.period;
       if (!monthlyMap[key]) monthlyMap[key] = { revenue: 0, expenses: 0, payroll: 0 };
       monthlyMap[key].payroll += pr.netPay;
     }
 
-    // Build monthly breakdown sorted by month key
     const monthNames: Record<string, string> = {
       '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr',
       '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Aug',

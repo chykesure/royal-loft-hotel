@@ -65,11 +65,6 @@ export function ExpensesModule() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
-  const [filterMonth, setFilterMonth] = useState('all');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-  const [showAdvancedFilter, setShowAdvancedFilter] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -94,7 +89,7 @@ export function ExpensesModule() {
         const list = Array.isArray(data) ? data : data.expenses || [];
         setExpenses(list.map((e: Record<string, unknown>) => ({
           ...e,
-          date: e.date || e.expenseDate,
+          expenseDate: e.expenseDate || e.date,
           amount: e.amount ?? (e.total ?? 0),
           description: e.description || e.name || '',
           category: e.category || 'miscellaneous',
@@ -142,7 +137,7 @@ export function ExpensesModule() {
         paymentMethod: formPaymentMethod,
         vendor: formVendor || undefined,
         reference: formReference || undefined,
-        date: new Date(formDate).toISOString(),
+        expenseDate: new Date(formDate).toISOString(),
         notes: formNotes || undefined,
       };
 
@@ -170,13 +165,13 @@ export function ExpensesModule() {
   };
 
   const handleEdit = (exp: Expense) => {
-    setFormDesc(exp.description || '');
-    setFormCategory(exp.category || '');
-    setFormAmount(String(exp.amount || 0));
-    setFormPaymentMethod(exp.paymentMethod || 'cash');
+    setFormDesc(exp.description);
+    setFormCategory(exp.category);
+    setFormAmount(String(exp.amount));
+    setFormPaymentMethod(exp.paymentMethod);
     setFormVendor(exp.vendor || '');
     setFormReference(exp.reference || '');
-    setFormDate((exp.expenseDate || exp.date || '').split('T')[0]);
+    setFormDate((exp.expenseDate || exp.date).split('T')[0]);
     setFormNotes(exp.notes || '');
     setEditingId(exp.id);
     setShowForm(true);
@@ -201,8 +196,8 @@ export function ExpensesModule() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.endsWith('.csv') && !file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
-      toast.error('Please select a CSV or Excel file');
+    if (!file.name.endsWith('.csv')) {
+      toast.error('Please select a CSV file');
       return;
     }
 
@@ -213,7 +208,6 @@ export function ExpensesModule() {
 
       const res = await fetch('/api/expenses/import-csv', {
         method: 'POST',
-        credentials: 'include',
         body: formData,
       });
 
@@ -245,53 +239,14 @@ export function ExpensesModule() {
   // Determine if expense is a CSV-imported record (has kitchen/hotel/beverages fields)
   const isCSVRecord = (exp: Expense) => exp.kitchen != null || exp.hotel != null || exp.beverages != null;
 
-  // Build list of available months from expense data
-  const availableMonths = (() => {
-    const monthSet = new Set<string>();
-    expenses.forEach((e) => {
-      const d = new Date(e.expenseDate || e.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      monthSet.add(key);
-    });
-    return Array.from(monthSet).sort().reverse();
-  })();
-
-  const formatMonthLabel = (key: string) => {
-    const [y, m] = key.split('-');
-    const d = new Date(parseInt(y), parseInt(m) - 1, 1);
-    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  };
-
   // Filter expenses
-  const filtered = expenses
-    .filter((exp) => {
-      const desc = exp.description || '';
-      const name = exp.name || '';
-      const expDate = new Date(exp.expenseDate || exp.date);
-      const expDateStr = expDate.toISOString().split('T')[0];
-      const expMonthKey = `${expDate.getFullYear()}-${String(expDate.getMonth() + 1).padStart(2, '0')}`;
-
-      const matchSearch = !search ||
-        desc.toLowerCase().includes(search.toLowerCase()) ||
-        name.toLowerCase().includes(search.toLowerCase()) ||
-        (exp.vendor || '').toLowerCase().includes(search.toLowerCase());
-      const matchCategory = filterCategory === 'all' || (exp.category || 'miscellaneous') === filterCategory;
-      const matchMonth = filterMonth === 'all' || expMonthKey === filterMonth;
-      const matchDateFrom = !filterDateFrom || expDateStr >= filterDateFrom;
-      const matchDateTo = !filterDateTo || expDateStr <= filterDateTo;
-
-      return matchSearch && matchCategory && matchMonth && matchDateFrom && matchDateTo;
-    })
-    .sort((a, b) => {
-      const da = new Date(a.expenseDate || a.date).getTime();
-      const db = new Date(b.expenseDate || b.date).getTime();
-      return sortOrder === 'desc' ? db - da : da - db;
-    });
-
-  // Computed totals for filtered results
-  const filteredTotal = filtered.reduce((sum, e) => {
-    return sum + (isCSVRecord(e) ? (e.total || 0) : (e.amount || 0));
-  }, 0);
+  const filtered = expenses.filter((exp) => {
+    const desc = exp.description || '';
+    const name = exp.name || '';
+    const matchSearch = !search || desc.toLowerCase().includes(search.toLowerCase()) || name.toLowerCase().includes(search.toLowerCase()) || (exp.vendor || '').toLowerCase().includes(search.toLowerCase());
+    const matchCategory = filterCategory === 'all' || (exp.category || 'miscellaneous') === filterCategory;
+    return matchSearch && matchCategory;
+  });
 
   // Summary stats
   const totalAmount = expenses.reduce((sum, e) => sum + (e.amount ?? (e.total ?? 0)), 0);
@@ -338,7 +293,7 @@ export function ExpensesModule() {
               <input
                 ref={csvInputRef}
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv"
                 className="hidden"
                 onChange={handleCSVImport}
               />
@@ -414,92 +369,20 @@ export function ExpensesModule() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search expenses..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-          </div>
-          <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="All Categories" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {CATEGORIES.map((cat) => (
-                <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant={showAdvancedFilter ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setShowAdvancedFilter(!showAdvancedFilter)}
-            className="w-full sm:w-auto gap-2"
-          >
-            <Filter className="h-4 w-4" />
-            Date Filter
-          </Button>
-          <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as 'desc' | 'asc')}>
-            <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="Sort by date" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="desc">Newest First</SelectItem>
-              <SelectItem value="asc">Oldest First</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Search expenses..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
-
-        {/* Advanced Date Filters */}
-        {showAdvancedFilter && (
-          <div className="flex flex-col sm:flex-row gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-            <div className="flex-1 grid gap-2">
-              <Label className="text-xs text-muted-foreground">From Date</Label>
-              <Input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)} />
-            </div>
-            <div className="flex-1 grid gap-2">
-              <Label className="text-xs text-muted-foreground">To Date</Label>
-              <Input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)} />
-            </div>
-            <div className="flex-1 grid gap-2">
-              <Label className="text-xs text-muted-foreground">Month</Label>
-              <Select value={filterMonth} onValueChange={(v) => {
-                setFilterMonth(v);
-                // Auto-set date range when a month is selected
-                if (v !== 'all') {
-                  const [y, m] = v.split('-');
-                  const from = `${y}-${m}-01`;
-                  const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
-                  const to = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
-                  setFilterDateFrom(from);
-                  setFilterDateTo(to);
-                } else {
-                  setFilterDateFrom('');
-                  setFilterDateTo('');
-                }
-              }}>
-                <SelectTrigger><SelectValue placeholder="All Months" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Months</SelectItem>
-                  {availableMonths.map((key) => (
-                    <SelectItem key={key} value={key}>{formatMonthLabel(key)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setFilterMonth('all');
-                  setFilterDateFrom('');
-                  setFilterDateTo('');
-                }}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Clear All
-              </Button>
-            </div>
-          </div>
-        )}
+        <Select value={filterCategory} onValueChange={setFilterCategory}>
+          <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="All Categories" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {CATEGORIES.map((cat) => (
+              <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Add/Edit Form */}
@@ -575,10 +458,7 @@ export function ExpensesModule() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center justify-between">
             <span>Expense Records</span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-normal">Total: {formatCurrency(filteredTotal)}</span>
-              <Badge variant="secondary">{filtered.length} items</Badge>
-            </div>
+            <Badge variant="secondary">{filtered.length} items</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -629,7 +509,7 @@ export function ExpensesModule() {
                         {exp.beverages != null && exp.beverages > 0 ? formatCurrency(exp.beverages) : '-'}
                       </td>
                       <td className="py-3 pr-4 text-right font-semibold text-red-600">
-                        {formatCurrency(isCSVRecord(exp) ? (exp.total || 0) : (exp.amount || 0))}
+                        {formatCurrency(exp.total ?? (exp.amount ?? 0))}
                       </td>
                       <td className="py-3 text-right">
                         <div className="flex items-center justify-end gap-1">

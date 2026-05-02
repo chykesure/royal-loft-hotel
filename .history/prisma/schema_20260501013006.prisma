@@ -590,6 +590,24 @@ model RoleModuleAccess {
 }
 
 // ============ EXPENSES ============
+model Expense {
+  id            String    @id @default(cuid())
+  description   String
+  category      String
+  amount        Float
+  paymentMethod String    @default("cash")
+  vendor        String?
+  reference     String?
+  expenseDate   DateTime
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([category])
+  @@index([expenseDate])
+}
+
 
 model Expense {
   id          String   @id @default(cuid())

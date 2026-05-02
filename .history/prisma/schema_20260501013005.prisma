@@ -590,27 +590,26 @@ model RoleModuleAccess {
 }
 
 // ============ EXPENSES ============
-
 model Expense {
-  id          String   @id @default(cuid())
-  date        DateTime
-  name        String?
-  description String?
-  category    String?
-  amount      Float?
-  kitchen     Float?
-  hotel       Float?
-  beverages   Float?
-  total       Float    @default(0)
-  vendor      String?
-  reference   String?
-  createdBy   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(cuid())
+  description   String
+  category      String
+  amount        Float
+  paymentMethod String    @default("cash")
+  vendor        String?
+  reference     String?
+  expenseDate   DateTime
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  @@index([date])
   @@index([category])
+  @@index([expenseDate])
 }
+
+
+
 
 model StaffAttendance {
   id        String   @id @default(cuid())

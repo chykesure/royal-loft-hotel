@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     // Calculate totals (support both amount and total fields)
     const total = expenses.reduce((sum, e: any) => sum + (e.amount ?? e.total ?? 0), 0);
     const monthTotal = await db.expense.aggregate({
-      _sum: { total: true } as any,
+      _sum: { total: true },
       where: {
         date: {
           gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),

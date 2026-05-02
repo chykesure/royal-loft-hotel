@@ -530,9 +530,7 @@ export function ReservationsModule() {
   const approachingCount = checkoutAlerts.filter(a => !a.isOverdue).length;
   const showBanner = checkoutAlerts.length > 0 && !bannerDismissed;
 
-
-  // ── SQL Import Handler ──
-    // ── SQL Import Handler (reads SSE stream — no timeout issues) ──
+    // ── SQL Import Handler ──
   const handleSQLImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -543,8 +541,6 @@ export function ReservationsModule() {
     }
 
     setIsImporting(true);
-    const progressToast = toast.loading('Starting SQL import...', { duration: Infinity });
-
     try {
       const formData = new FormData();
       formData.append('sqlFile', file);
@@ -555,64 +551,25 @@ export function ReservationsModule() {
         body: formData,
       });
 
-      // Handle non-streaming errors (auth, validation)
-      if (res.status !== 200 || !res.body) {
-        const data = await res.json().catch(() => ({}));
-        toast.dismiss(progressToast);
-        toast.error(data.error || `Import failed (status ${res.status})`);
-        return;
-      }
+      const data = await res.json();
 
-      // Read SSE stream — each event is "data: {...}\n\n"
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
-
-            if (event.type === 'progress') {
-              toast.loading(event.message, { id: progressToast, duration: Infinity });
-            } else if (event.type === 'done') {
-              toast.dismiss(progressToast);
-              const fmt = (n: number) =>
-                new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(n);
-              const setupMsg = (event.roomTypesCreated || 0) + (event.roomsCreated || 0) > 0
-                ? ` — ${event.roomTypesCreated} room types & ${event.roomsCreated} rooms auto-created`
-                : '';
-              toast.success(
-                `Imported ${event.imported} reservations (${event.guestsCreated} new guests, ${event.guestsMatched} existing matched)` +
-                  (event.skipped > 0 ? ` — ${event.skipped} skipped` : '') +
-                  `${setupMsg}` +
-                  ` — Revenue: ${fmt(event.summary.totalRevenue)}`
-              );
-              if (event.errors && event.errors.length > 0) {
-                toast.warning(`${event.errors.length} issues: ${event.errors.slice(0, 3).join('; ')}${event.errors.length > 3 ? '...' : ''}`);
-              }
-              fetchData();
-            } else if (event.type === 'error') {
-              toast.dismiss(progressToast);
-              toast.error(event.error || 'Import failed');
-            }
-          } catch {
-            // ignore malformed lines
-          }
+      if (res.ok && data.success) {
+        const fmt = (n: number) =>
+          new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN', minimumFractionDigits: 0 }).format(n);
+        toast.success(
+          `Imported ${data.imported} reservations (${data.guestsCreated} new guests, ${data.guestsMatched} existing guests matched)` +
+            (data.skipped > 0 ? ` — ${data.skipped} skipped` : '') +
+            ` — Revenue: ${fmt(data.summary.totalRevenue)}`
+        );
+        if (data.errors.length > 0) {
+          toast.warning(`${data.errors.length} issues: ${data.errors.slice(0, 3).join('; ')}${data.errors.length > 3 ? '...' : ''}`);
         }
+        fetchData();
+      } else {
+        toast.error(data.error || 'Import failed');
       }
-    } catch (err: unknown) {
-      toast.dismiss(progressToast);
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      toast.error(`Failed to import SQL file: ${msg}`);
+    } catch {
+      toast.error('Failed to import SQL file');
     } finally {
       setIsImporting(false);
       if (sqlInputRef.current) sqlInputRef.current.value = '';
@@ -743,30 +700,6 @@ export function ReservationsModule() {
               <Bell className="h-4 w-4 mr-1" />
               {checkoutAlerts.length} Alert{checkoutAlerts.length > 1 ? 's' : ''}
             </Button>
-          )}
-          {isDeveloper && (
-            <>
-              <input
-                ref={sqlInputRef}
-                type="file"
-                accept=".sql"
-                className="hidden"
-                onChange={handleSQLImport}
-              />
-              <Button
-                variant="outline"
-                disabled={isImporting}
-                onClick={() => sqlInputRef.current?.click()}
-                className="border-emerald-500 text-emerald-600 hover:bg-emerald-50"
-              >
-                {isImporting ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Database className="h-4 w-4 mr-2" />
-                )}
-                Import SQL
-              </Button>
-            </>
           )}
           <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => navigateToFrontDeskTab('walkin')}>
             <Plus className="h-4 w-4 mr-1" /> New Reservation
@@ -989,8 +922,8 @@ export function ReservationsModule() {
                           type="button"
                           onClick={() => toggleRoomSelection(r.id)}
                           className={`w-full flex items-center justify-between px-3 py-2.5 text-left text-sm border-b last:border-b-0 transition-colors ${isSelected
-                            ? 'bg-violet-50 border-l-2 border-l-violet-500'
-                            : 'hover:bg-muted/50'
+                              ? 'bg-violet-50 border-l-2 border-l-violet-500'
+                              : 'hover:bg-muted/50'
                             }`}
                         >
                           <div className="flex items-center gap-2">

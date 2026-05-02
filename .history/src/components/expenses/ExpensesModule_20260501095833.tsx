@@ -94,7 +94,7 @@ export function ExpensesModule() {
         const list = Array.isArray(data) ? data : data.expenses || [];
         setExpenses(list.map((e: Record<string, unknown>) => ({
           ...e,
-          date: e.date || e.expenseDate,
+          expenseDate: e.expenseDate || e.date,
           amount: e.amount ?? (e.total ?? 0),
           description: e.description || e.name || '',
           category: e.category || 'miscellaneous',
