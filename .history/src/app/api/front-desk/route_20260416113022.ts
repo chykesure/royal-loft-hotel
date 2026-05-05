@@ -180,55 +180,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // ─── Robust body parsing for Next.js 16 ───
-    let body: any;
-
-    const contentType = request.headers.get('content-type') || '';
-
-    if (contentType.includes('application/json')) {
-      try {
-        body = await request.json();
-      } catch {
-        // If request.json() fails, try reading as raw text
-        const rawText = await request.text();
-        try {
-          body = JSON.parse(rawText);
-        } catch {
-          return NextResponse.json(
-            { error: 'Invalid JSON body. Please send valid JSON with Content-Type: application/json' },
-            { status: 400 }
-          );
-        }
-      }
-    } else if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
-      // Handle form data (for future file uploads etc.)
-      try {
-        const formData = await request.formData();
-        body = Object.fromEntries(formData.entries());
-      } catch {
-        const rawText = await request.text();
-        try {
-          body = JSON.parse(rawText);
-        } catch {
-          return NextResponse.json({ error: 'Invalid form data' }, { status: 400 });
-        }
-      }
-    } else {
-      // No recognized content-type — try raw text as last resort (Next.js 16 quirk)
-      const rawText = await request.text();
-      if (!rawText.trim()) {
-        return NextResponse.json({ error: 'Request body is empty' }, { status: 400 });
-      }
-      try {
-        body = JSON.parse(rawText);
-      } catch {
-        return NextResponse.json(
-          { error: 'Invalid request body. Expected JSON with Content-Type: application/json' },
-          { status: 400 }
-        );
-      }
-    }
-
+    const body = await request.json();
     const { action } = body;
 
     // ─── CHECK-IN ──────────────────────────────────────────────
@@ -343,8 +295,8 @@ export async function POST(request: NextRequest) {
       });
 
       // Process payment if amount > 0
-      if (paymentAmount && parseFloat(String(paymentAmount)) > 0) {
-        const amount = parseFloat(String(paymentAmount));
+      if (paymentAmount && parseFloat(paymentAmount) > 0) {
+        const amount = parseFloat(paymentAmount);
 
         let bill = reservation.bill;
         if (!bill) {
@@ -412,7 +364,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'First name, last name, phone, room type, and check-out date are required' }, { status: 400 });
       }
 
-      const checkOutDate = new Date(String(checkOut));
+      const checkOutDate = new Date(checkOut);
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
@@ -423,7 +375,7 @@ export async function POST(request: NextRequest) {
       // Find available room of the specified type
       const availableRoom = await db.room.findFirst({
         where: {
-          roomTypeId: String(roomTypeId),
+          roomTypeId,
           status: 'available',
         },
         include: { roomType: true },
@@ -446,29 +398,23 @@ export async function POST(request: NextRequest) {
 
       // Create or find guest
       let guest = await db.guest.findFirst({
-        where: { phone: String(phone) },
+        where: { phone },
       });
 
       if (guest) {
         guest = await db.guest.update({
           where: { id: guest.id },
-          data: {
-            firstName: String(firstName),
-            lastName: String(lastName),
-            email: email ? String(email) : undefined,
-            idType: idType ? String(idType) : undefined,
-            idNumber: idNumber ? String(idNumber) : undefined,
-          },
+          data: { firstName, lastName, email: email || undefined, idType: idType || undefined, idNumber: idNumber || undefined },
         });
       } else {
         guest = await db.guest.create({
           data: {
-            firstName: String(firstName),
-            lastName: String(lastName),
-            phone: String(phone),
-            email: email ? String(email) : undefined,
-            idType: idType ? String(idType) : undefined,
-            idNumber: idNumber ? String(idNumber) : undefined,
+            firstName,
+            lastName,
+            phone,
+            email: email || undefined,
+            idType: idType || undefined,
+            idNumber: idNumber || undefined,
           },
         });
       }
@@ -483,7 +429,7 @@ export async function POST(request: NextRequest) {
           checkOut: checkOutDate,
           status: 'checked_in',
           source: 'walk_in',
-          adults: adults ? parseInt(String(adults)) : 1,
+          adults: adults || 1,
           children: 0,
           roomRate,
           totalAmount,
@@ -521,7 +467,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: unknown) {
     console.error('Front desk POST error:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return NextResponse.json({ error: `Failed to process front desk operation: ${message}` }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to process front desk operation' }, { status: 500 });
   }
 }

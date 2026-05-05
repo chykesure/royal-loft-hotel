@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // ─── Robust body parsing for Next.js 16 ───
-    let body: any;
+    let body: Record<string, unknown>;
 
     const contentType = request.headers.get('content-type') || '';
 

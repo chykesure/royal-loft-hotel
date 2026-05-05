@@ -103,12 +103,6 @@ const PAYMENT_METHODS = [
   { value: 'moniepoint', label: 'Moniepoint' },
 ];
 
-// Helper: format rate for display — avoids showing ₦0k when baseRate is 0
-function formatRateDisplay(rate: number): string {
-  if (!rate || rate <= 0) return 'Rate on request';
-  return `${formatCurrency(rate)}/night`;
-}
-
 function getNights(checkIn: string, checkOut: string): number {
   const ci = new Date(checkIn);
   const co = new Date(checkOut);
@@ -228,17 +222,16 @@ export function FrontDeskModule() {
     }
     try {
       setCheckinSubmitting(true);
-      const payload = {
-        action: 'checkin' as const,
-        reservationId: selectedArrival.id,
-        idType: checkinForm.idType,
-        idNumber: checkinForm.idNumber,
-        specialRequests: checkinForm.specialRequests || undefined,
-      };
       const res = await fetch('/api/front-desk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          action: 'checkin',
+          reservationId: selectedArrival.id,
+          idType: checkinForm.idType,
+          idNumber: checkinForm.idNumber,
+          specialRequests: checkinForm.specialRequests || undefined,
+        }),
       });
       if (res.ok) {
         toast.success(`${selectedArrival.guest.firstName} ${selectedArrival.guest.lastName} checked in successfully!`);
@@ -248,9 +241,8 @@ export function FrontDeskModule() {
         const err = await res.json();
         toast.error(err.error || 'Check-in failed');
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      toast.error(`Failed to process check-in: ${msg}`);
+    } catch {
+      toast.error('Failed to process check-in');
     } finally {
       setCheckinSubmitting(false);
     }
@@ -269,16 +261,15 @@ export function FrontDeskModule() {
     if (!selectedDeparture) return;
     try {
       setCheckoutSubmitting(true);
-      const payload = {
-        action: 'checkout' as const,
-        reservationId: selectedDeparture.id,
-        paymentMethod: checkoutForm.paymentMethod,
-        paymentAmount: checkoutForm.paymentAmount || '0',
-      };
       const res = await fetch('/api/front-desk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          action: 'checkout',
+          reservationId: selectedDeparture.id,
+          paymentMethod: checkoutForm.paymentMethod,
+          paymentAmount: checkoutForm.paymentAmount || '0',
+        }),
       });
       if (res.ok) {
         toast.success(`${selectedDeparture.guest.firstName} ${selectedDeparture.guest.lastName} checked out successfully!`);
@@ -288,9 +279,8 @@ export function FrontDeskModule() {
         const err = await res.json();
         toast.error(err.error || 'Check-out failed');
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      toast.error(`Failed to process check-out: ${msg}`);
+    } catch {
+      toast.error('Failed to process check-out');
     } finally {
       setCheckoutSubmitting(false);
     }
@@ -304,22 +294,21 @@ export function FrontDeskModule() {
     }
     try {
       setWalkinSubmitting(true);
-      const payload = {
-        action: 'walkin' as const,
-        firstName,
-        lastName,
-        phone,
-        email: walkinForm.email || undefined,
-        roomTypeId,
-        checkOut,
-        adults: parseInt(adults) || 1,
-        idType: walkinForm.idType || undefined,
-        idNumber: walkinForm.idNumber || undefined,
-      };
       const res = await fetch('/api/front-desk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          action: 'walkin',
+          firstName,
+          lastName,
+          phone,
+          email: walkinForm.email || undefined,
+          roomTypeId,
+          checkOut,
+          adults: parseInt(adults) || 1,
+          idType: walkinForm.idType || undefined,
+          idNumber: walkinForm.idNumber || undefined,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -334,9 +323,8 @@ export function FrontDeskModule() {
         const err = await res.json();
         toast.error(err.error || 'Walk-in registration failed');
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      toast.error(`Failed to register walk-in: ${msg}`);
+    } catch {
+      toast.error('Failed to register walk-in');
     } finally {
       setWalkinSubmitting(false);
     }
@@ -705,7 +693,7 @@ export function FrontDeskModule() {
                     <SelectContent>
                       {availableRooms.map((group) => (
                         <SelectItem key={group.roomType.id} value={group.roomType.id}>
-                          {group.roomType.name} — {formatRateDisplay(group.roomType.baseRate)} ({group.rooms.length} available)
+                          {group.roomType.name} — {formatCurrency(group.roomType.baseRate)}/night ({group.rooms.length} available)
                         </SelectItem>
                       ))}
                     </SelectContent>
