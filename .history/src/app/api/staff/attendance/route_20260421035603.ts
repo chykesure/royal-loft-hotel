@@ -1,16 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-// ─── Robust body parser (Next.js 16 compatible) ───
-async function parseBody(req: NextRequest): Promise<any> {
-  const ct = req.headers.get('content-type') || '';
-  if (ct.includes('application/json')) {
-    return await req.json();
-  }
-  const raw = await req.text();
-  try { return JSON.parse(raw); } catch { throw new Error('Invalid JSON body'); }
-}
-
 // POST /api/staff/attendance
 // Body: { staffId: string, status: "present" | "absent" | "half_day" | "on_leave" | "reset" }
 export async function POST(request: NextRequest) {
@@ -30,7 +20,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await parseBody(request);
+    const body = await request.json();
     const { staffId, status } = body;
 
     if (!staffId || !status) {
@@ -83,7 +73,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ attendance: null, message: 'Attendance reset' });
     }
 
-    // Toggle: if the same status is already set, treat it as reset
+    // Toggle: if the same status is already set, treat it as undo/reset
     const existingAtt = await db.attendance.findFirst({
       where: {
         staffId,
@@ -106,9 +96,11 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      return NextResponse.json({ attendance: null, message: 'Attendance cleared' });
+      const label = status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      return NextResponse.json({ attendance: null, message: `${label} cleared` });
     }
 
+    // Delete existing attendance for today
     await db.attendance.deleteMany({
       where: {
         staffId,
@@ -116,6 +108,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Create new attendance record
     const clockIn = status === 'present' || status === 'half_day' ? new Date() : null;
     const hoursWorked = status === 'present' ? 8 : status === 'half_day' ? 4 : null;
 
@@ -129,6 +122,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Toggle staff status based on attendance
     if (status === 'on_leave') {
       await db.staffProfile.update({
         where: { id: staffId },

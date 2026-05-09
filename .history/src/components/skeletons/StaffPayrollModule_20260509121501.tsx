@@ -37,7 +37,6 @@ import {
   CheckCircle,
   UserCheck,
   AlertTriangle,
-  Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -60,8 +59,6 @@ interface StaffMember {
   baseSalary: number;
   status: string;
   startDate: string;
-  bankName: string | null;
-  bankAccount: string | null;
   todayAttendance: {
     status: string;
     clockIn: string | null;
@@ -131,16 +128,6 @@ interface LinkUserForm {
   bankAccount: string;
 }
 
-interface EditStaffForm {
-  staffId: string;
-  department: string;
-  position: string;
-  baseSalary: string;
-  status: string;
-  bankName: string;
-  bankAccount: string;
-}
-
 // ---- Helpers ----
 
 const DEPARTMENT_LABELS: Record<string, string> = {
@@ -188,13 +175,6 @@ const DEPARTMENTS = [
   { value: 'accounts', label: 'Accounts' },
 ];
 
-const STAFF_STATUSES = [
-  { value: 'active', label: 'Active' },
-  { value: 'on_leave', label: 'On Leave' },
-  { value: 'suspended', label: 'Suspended' },
-  { value: 'terminated', label: 'Terminated' },
-];
-
 const emptyForm: AddStaffForm = {
   name: '',
   email: '',
@@ -215,16 +195,6 @@ const emptyLinkForm: LinkUserForm = {
   department: '',
   position: '',
   baseSalary: '',
-  bankName: '',
-  bankAccount: '',
-};
-
-const emptyEditForm: EditStaffForm = {
-  staffId: '',
-  department: '',
-  position: '',
-  baseSalary: '',
-  status: '',
   bankName: '',
   bankAccount: '',
 };
@@ -265,11 +235,6 @@ export function StaffPayrollModule() {
   const [linkUserOpen, setLinkUserOpen] = useState(false);
   const [linkForm, setLinkForm] = useState<LinkUserForm>(emptyLinkForm);
   const [isLinking, setIsLinking] = useState(false);
-
-  // Edit Staff dialog  ← NEW
-  const [editStaffOpen, setEditStaffOpen] = useState(false);
-  const [editForm, setEditForm] = useState<EditStaffForm>(emptyEditForm);
-  const [isEditing, setIsEditing] = useState(false);
 
   // Generate Payroll dialog
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -357,20 +322,6 @@ export function StaffPayrollModule() {
     setLinkUserOpen(true);
   };
 
-  // Open Edit Dialog  ← NEW
-  const openEditDialog = (member: StaffMember) => {
-    setEditForm({
-      staffId: member.id,
-      department: member.department,
-      position: member.position,
-      baseSalary: String(member.baseSalary),
-      status: member.status,
-      bankName: member.bankName || '',
-      bankAccount: member.bankAccount || '',
-    });
-    setEditStaffOpen(true);
-  };
-
   // Add Staff
   const handleAddStaff = async () => {
     if (!addForm.name || !addForm.email || !addForm.department || !addForm.position || !addForm.baseSalary || !addForm.employeeId) {
@@ -428,43 +379,6 @@ export function StaffPayrollModule() {
       toast.error('Failed to link user');
     } finally {
       setIsLinking(false);
-    }
-  };
-
-  // Edit Staff  ← NEW
-  const handleEditStaff = async () => {
-    if (!editForm.staffId || !editForm.department || !editForm.position || !editForm.baseSalary || !editForm.status) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-    setIsEditing(true);
-    try {
-      const res = await fetch('/api/staff', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editForm.staffId,
-          department: editForm.department,
-          position: editForm.position,
-          baseSalary: Number(editForm.baseSalary),
-          status: editForm.status,
-          bankName: editForm.bankName || null,
-          bankAccount: editForm.bankAccount || null,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('Staff profile updated successfully!');
-        setEditStaffOpen(false);
-        setEditForm(emptyEditForm);
-        fetchData();
-      } else {
-        toast.error(data.error || 'Failed to update staff');
-      }
-    } catch {
-      toast.error('Failed to update staff');
-    } finally {
-      setIsEditing(false);
     }
   };
 
@@ -575,8 +489,7 @@ export function StaffPayrollModule() {
     }
   };
 
-  // FIX 1: Filter out developer from displayed list + FIX 3: employeeId shown in cards
-  const filteredStaff = (search.trim()
+  const filteredStaff = search.trim()
     ? staff.filter(
         (s) =>
           s.user.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -586,8 +499,7 @@ export function StaffPayrollModule() {
             .toLowerCase()
             .includes(search.toLowerCase())
       )
-    : staff
-  ).filter((s) => s.user.role !== 'developer'); // ← FIX 1: hide developer
+    : staff;
 
   const totalDeptSalary = payrollByDepartment.reduce((s, d) => s + d.totalSalary, 0);
 
@@ -774,11 +686,9 @@ export function StaffPayrollModule() {
                   <div className="text-center py-8">
                     <Users className="h-10 w-10 text-muted-foreground mx-auto mb-2" />
                     <p className="text-sm text-muted-foreground mb-3">
-                      {staff.filter((s) => s.user.role !== 'developer').length === 0
-                        ? 'No staff members yet'
-                        : 'No staff match your search'}
+                      {staff.length === 0 ? 'No staff members yet' : 'No staff match your search'}
                     </p>
-                    {staff.filter((s) => s.user.role !== 'developer').length === 0 && (
+                    {staff.length === 0 && (
                       <Button
                         size="sm"
                         className="bg-amber-500 hover:bg-amber-600 text-white"
@@ -827,7 +737,7 @@ export function StaffPayrollModule() {
                           <div className="min-w-0">
                             <p className="text-sm font-medium truncate">{member.user.name}</p>
                             <p className="text-xs text-muted-foreground truncate">
-                              {member.employeeId} &middot; {member.position} &middot; {DEPARTMENT_LABELS[member.department] || member.department}
+                              {member.position} &middot; {DEPARTMENT_LABELS[member.department] || member.department}
                             </p>
                           </div>
                         </div>
@@ -872,16 +782,6 @@ export function StaffPayrollModule() {
                           <Badge className={`text-[10px] px-2 py-0.5 h-5 border-0 ${STATUS_BADGE[member.status] || ''}`}>
                             {formatLabel(member.status)}
                           </Badge>
-                          {/* Edit Button ← FIX 2 */}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0"
-                            onClick={(e) => { e.stopPropagation(); openEditDialog(member); }}
-                            title="Edit Staff"
-                          >
-                            <Pencil className="h-3.5 w-3.5 text-blue-500" />
-                          </Button>
                           <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => openDetail(member)}>
                             <Eye className="h-3.5 w-3.5 text-muted-foreground" />
                           </Button>
@@ -993,9 +893,7 @@ export function StaffPayrollModule() {
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                  {unassignedUsers
-                    .filter((u) => u.role !== 'developer') // also hide developer from unassigned list
-                    .map((user) => (
+                  {unassignedUsers.map((user) => (
                     <div
                       key={user.id}
                       className="flex items-center justify-between p-3 rounded-lg bg-orange-50 border border-orange-100"
@@ -1142,61 +1040,6 @@ export function StaffPayrollModule() {
             <Button variant="outline" onClick={() => setLinkUserOpen(false)}>Cancel</Button>
             <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={handleLinkUser} disabled={isLinking}>
               {isLinking ? (<><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Linking...</>) : (<><UserCheck className="h-4 w-4 mr-1" /> Create Profile</>)}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ─── EDIT STAFF DIALOG ─── */}
-      <Dialog open={editStaffOpen} onOpenChange={setEditStaffOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pencil className="h-5 w-5 text-blue-500" />
-              Edit Staff Profile
-            </DialogTitle>
-            <DialogDescription>Update staff member details. Changes will take effect immediately.</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-xs text-muted-foreground">Department *</Label>
-              <Select value={editForm.department} onValueChange={(val) => setEditForm({ ...editForm, department: val })}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Select department" /></SelectTrigger>
-                <SelectContent>
-                  {DEPARTMENTS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Position *</Label>
-              <Input placeholder="e.g. Receptionist" value={editForm.position} onChange={(e) => setEditForm({ ...editForm, position: e.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Base Salary (₦) *</Label>
-              <Input type="number" placeholder="e.g. 150000" value={editForm.baseSalary} onChange={(e) => setEditForm({ ...editForm, baseSalary: e.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Status *</Label>
-              <Select value={editForm.status} onValueChange={(val) => setEditForm({ ...editForm, status: val })}>
-                <SelectTrigger className="mt-1"><SelectValue placeholder="Select status" /></SelectTrigger>
-                <SelectContent>
-                  {STAFF_STATUSES.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Bank Name</Label>
-              <Input placeholder="e.g. GTBank" value={editForm.bankName} onChange={(e) => setEditForm({ ...editForm, bankName: e.target.value })} className="mt-1" />
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Bank Account</Label>
-              <Input placeholder="Account number" value={editForm.bankAccount} onChange={(e) => setEditForm({ ...editForm, bankAccount: e.target.value })} className="mt-1" />
-            </div>
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0 mt-2">
-            <Button variant="outline" onClick={() => setEditStaffOpen(false)}>Cancel</Button>
-            <Button className="bg-blue-500 hover:bg-blue-600 text-white" onClick={handleEditStaff} disabled={isEditing}>
-              {isEditing ? (<><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Saving...</>) : (<><Pencil className="h-4 w-4 mr-1" /> Save Changes</>)}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1361,20 +1204,6 @@ export function StaffPayrollModule() {
                   <p className="text-sm font-medium">{selectedStaff.user.phone || 'N/A'}</p>
                 </div>
               </div>
-
-              {/* Bank info */}
-              {(selectedStaff.bankName || selectedStaff.bankAccount) && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg bg-muted/30">
-                    <p className="text-xs text-muted-foreground">Bank Name</p>
-                    <p className="text-sm font-medium">{selectedStaff.bankName || 'N/A'}</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted/30">
-                    <p className="text-xs text-muted-foreground">Bank Account</p>
-                    <p className="text-sm font-medium">{selectedStaff.bankAccount || 'N/A'}</p>
-                  </div>
-                </div>
-              )}
 
               {/* Today's attendance */}
               <div className="p-3 rounded-lg bg-muted/30">

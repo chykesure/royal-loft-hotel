@@ -2,18 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { formatCurrency, hashPassword } from '@/lib/auth';
 
-// ─── Robust body parser (Next.js 16 compatible) ───
-async function parseBody(req: NextRequest): Promise<any> {
-  const ct = req.headers.get('content-type') || '';
-  if (ct.includes('application/json')) {
-    return await req.json();
-  }
-  const raw = await req.text();
-  try { return JSON.parse(raw); } catch { throw new Error('Invalid JSON body'); }
-}
-
-// ─── GET: List all staff + today's attendance + current payroll ───
-// ?mode=unassigned → users without StaffProfile
+// ─── GET: List all staff with today's attendance + current payroll ───
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,25 +18,6 @@ export async function GET(request: NextRequest) {
 
     if (!session || session.expiresAt < new Date()) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // ?mode=unassigned → return users without StaffProfile
-    const { searchParams } = new URL(request.url);
-    const mode = searchParams.get('mode');
-
-    if (mode === 'unassigned') {
-      const allUsers = await db.user.findMany({
-        select: { id: true, name: true, email: true, phone: true, role: true, department: true, isActive: true, createdAt: true },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      const staffProfiles = await db.staffProfile.findMany({
-        select: { userId: true },
-      });
-      const linkedUserIds = new Set(staffProfiles.map(p => p.userId));
-
-      const unassigned = allUsers.filter(u => !linkedUserIds.has(u.id));
-      return NextResponse.json({ unassigned });
     }
 
     const today = new Date();
@@ -192,7 +162,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ─── POST: Create new staff (User + StaffProfile) OR link existing user ───
+// ─── POST: Create new staff (User + StaffProfile) ───
 
 export async function POST(request: NextRequest) {
   try {
@@ -210,70 +180,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await parseBody(request);
-    const { action } = body;
-
-    // ── ACTION: link_user — Create StaffProfile for an existing User ──
-    if (action === 'link_user') {
-      const { userId, employeeId, department, position, baseSalary, bankName, bankAccount } = body;
-
-      if (!userId || !employeeId || !department || !position || !baseSalary) {
-        return NextResponse.json(
-          { error: 'User ID, Employee ID, department, position, and base salary are required' },
-          { status: 400 }
-        );
-      }
-
-      // Check user exists
-      const existingUser = await db.user.findUnique({ where: { id: userId } });
-      if (!existingUser) {
-        return NextResponse.json({ error: 'User not found' }, { status: 404 });
-      }
-
-      // Check user doesn't already have a staff profile
-      const existingProfile = await db.staffProfile.findUnique({ where: { userId } });
-      if (existingProfile) {
-        return NextResponse.json(
-          { error: 'This user already has a staff profile' },
-          { status: 400 }
-        );
-      }
-
-      // Check unique employee ID
-      const existingEmpId = await db.staffProfile.findUnique({ where: { employeeId } });
-      if (existingEmpId) {
-        return NextResponse.json({ error: 'This employee ID is already in use' }, { status: 400 });
-      }
-
-      const profile = await db.staffProfile.create({
-        data: {
-          userId,
-          employeeId,
-          department,
-          position,
-          baseSalary: Number(baseSalary),
-          startDate: new Date(),
-          status: 'active',
-          bankName: bankName || null,
-          bankAccount: bankAccount || null,
-        },
-        include: {
-          user: {
-            select: { name: true, email: true, phone: true, avatar: true, role: true, isActive: true },
-          },
-        },
-      });
-
-      // Update the user's department to match
-      await db.user.update({
-        where: { id: userId },
-        data: { department },
-      });
-
-      return NextResponse.json({ staff: profile }, { status: 201 });
-    }
-
-    // ── DEFAULT ACTION: create — Create new User + StaffProfile ──
+    const body = await request.json();
     const {
       name,
       email,
@@ -302,7 +209,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existingProfile = await db.staffProfile.findUnique({ where: { employeeId } });
+    const existingProfile = await db.staffProfile.findUnique({
+      where: { employeeId },
+    });
     if (existingProfile) {
       return NextResponse.json(
         { error: 'This employee ID is already in use' },
@@ -338,7 +247,14 @@ export async function POST(request: NextRequest) {
       },
       include: {
         user: {
-          select: { name: true, email: true, phone: true, avatar: true, role: true, isActive: true },
+          select: {
+            name: true,
+            email: true,
+            phone: true,
+            avatar: true,
+            role: true,
+            isActive: true,
+          },
         },
       },
     });
@@ -346,9 +262,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ staff: profile }, { status: 201 });
   } catch (error: unknown) {
     console.error('Create staff error:', error);
-    const errMsg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: `Failed to create staff profile: ${errMsg}` },
+      { error: 'Failed to create staff profile' },
       { status: 500 }
     );
   }

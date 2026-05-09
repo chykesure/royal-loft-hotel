@@ -128,8 +128,9 @@ export async function GET(request: NextRequest) {
 }
 
 // --- OVERVIEW HANDLER ---
-// Salaries are EXCLUDED everywhere (they belong to Staff & Payroll module only)
 async function handleOverview(monthStart: Date, monthEnd: Date) {
+  const currentPeriod = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`;
+
   // Monthly revenue
   const monthlyBills = await db.bill.findMany({
     where: { createdAt: { gte: monthStart, lte: monthEnd } },
@@ -150,49 +151,60 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
     total: outstandingRecords.reduce((s: number, b: any) => s + (b.balanceAmount || 0), 0),
   };
 
-  // Grand totals (all-time) — EXCLUDE salaries
+  // Grand totals (all-time) - using ?. for TS safety
   const [grandRev, grandExp] = await Promise.all([
     db.bill.aggregate({ _sum: { totalAmount: true } }),
-    db.expense.aggregate({ _sum: { amount: true, total: true }, where: { category: { not: 'salaries' } } }),
+    db.expense.aggregate({ _sum: { amount: true, total: true } }),
   ] as any);
   const grandTotalRevenue = (grandRev as any)?._sum?.totalAmount || 0;
   const grandTotalExpenses = ((grandExp as any)?._sum?.amount || 0) + ((grandExp as any)?._sum?.total || 0);
   const grandTotalProfit = grandTotalRevenue - grandTotalExpenses;
 
-  // Monthly expenses — EXCLUDE salaries
+  // Monthly expenses
   const monthlyExpRecords = await db.expense.findMany({
-    where: { date: { gte: monthStart, lte: monthEnd }, category: { not: 'salaries' } },
+    where: { date: { gte: monthStart, lte: monthEnd } },
     select: { amount: true, total: true },
   } as any);
   const totalExpenses = monthlyExpRecords.reduce((s: number, e: any) => s + (e.amount || e.total || 0), 0);
 
-  // Net profit = Revenue - non-salary expenses (salaries tracked in Staff & Payroll)
-  const netProfit = monthlyRevenue - totalExpenses;
+  // Monthly payroll
+  let monthlyPayroll = 0;
+  try {
+    const payRecords = await db.payrollRecord.findMany({ where: { period: currentPeriod }, select: { netPay: true } } as any);
+    monthlyPayroll = payRecords.reduce((s: number, p: any) => s + (p.netPay || 0), 0);
+  } catch { /* PayrollRecord may not exist */ }
 
-  // Trends (compare to previous month) — EXCLUDE salaries
+  const netProfit = monthlyRevenue - totalExpenses - monthlyPayroll;
+
+  // Trends
   const prevStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
   const prevEnd = new Date(monthStart.getFullYear(), monthStart.getMonth(), 0, 23, 59, 59, 999);
+  const prevPeriod = `${prevStart.getFullYear()}-${String(prevStart.getMonth() + 1).padStart(2, '0')}`;
   let trends = { revenue: 0, profit: 0 };
 
   try {
     const prevBills = await db.bill.findMany({ where: { createdAt: { gte: prevStart, lte: prevEnd } }, select: { totalAmount: true } } as any);
     const prevRevenue = prevBills.reduce((s: number, b: any) => s + (b.totalAmount || 0), 0);
-    const prevExp = await db.expense.findMany({ where: { date: { gte: prevStart, lte: prevEnd }, category: { not: 'salaries' } }, select: { amount: true, total: true } } as any);
+    const prevExp = await db.expense.findMany({ where: { date: { gte: prevStart, lte: prevEnd } }, select: { amount: true, total: true } } as any);
     const prevExpTotal = prevExp.reduce((s: number, e: any) => s + (e.amount || e.total || 0), 0);
-    const prevProfit = prevRevenue - prevExpTotal;
+    let prevPayroll = 0;
+    try {
+      const prevPay = await db.payrollRecord.findMany({ where: { period: prevPeriod }, select: { netPay: true } } as any);
+      prevPayroll = prevPay.reduce((s: number, p: any) => s + (p.netPay || 0), 0);
+    } catch { /* ignore */ }
+    const prevProfit = prevRevenue - prevExpTotal - prevPayroll;
 
     if (prevRevenue > 0) trends.revenue = Math.round(((monthlyRevenue - prevRevenue) / prevRevenue) * 100);
     if (prevProfit !== 0) trends.profit = Math.round(((netProfit - prevProfit) / Math.abs(prevProfit)) * 100);
   } catch { /* trends stay at 0 */ }
 
-  // Recent transactions — exclude salaries
+  // Recent transactions
   const recentPayments = await db.payment.findMany({
     take: 20,
     orderBy: { createdAt: 'desc' },
     include: { bill: { include: { guest: { select: { firstName: true, lastName: true } } } } },
   } as any);
   const recentExpenseRecords = await db.expense.findMany({
-    where: { category: { not: 'salaries' } },
     take: 20,
     orderBy: { date: 'desc' },
   } as any);
@@ -307,18 +319,14 @@ async function handleRevenueDetail(from: Date, to: Date) {
 }
 
 // --- EXPENSE DETAIL HANDLER ---
-// Salaries are EXCLUDED from the expense details view (they belong to Staff & Payroll only)
 async function handleExpenseDetail(from: Date, to: Date) {
-  // Grand total - excludes salaries
-  const grandExp = await db.expense.aggregate({
-    _sum: { amount: true, total: true },
-    where: { category: { not: 'salaries' } },
-  } as any);
+  // Grand total - using ?. for TS safety
+  const grandExp = await db.expense.aggregate({ _sum: { amount: true, total: true } } as any);
   const grandTotal = ((grandExp as any)?._sum?.amount || 0) + ((grandExp as any)?._sum?.total || 0);
 
-  // Current period expenses — EXCLUDE salaries
+  // Current period expenses
   const expenses = await db.expense.findMany({
-    where: { date: { gte: from, lte: to }, category: { not: 'salaries' } },
+    where: { date: { gte: from, lte: to } },
     orderBy: { date: 'desc' },
   } as any);
 
@@ -338,10 +346,10 @@ async function handleExpenseDetail(from: Date, to: Date) {
     }))
     .sort((a, b) => b.amount - a.amount);
 
-  // Previous period — EXCLUDE salaries
+  // Previous period
   const { prevStart, prevEnd } = getPreviousPeriod(from, to);
   const prevExpenses = await db.expense.findMany({
-    where: { date: { gte: prevStart, lte: prevEnd }, category: { not: 'salaries' } },
+    where: { date: { gte: prevStart, lte: prevEnd } },
     select: { amount: true, total: true, category: true },
   } as any);
   const prevTotal = prevExpenses.reduce((s: number, e: any) => s + (e.amount || e.total || 0), 0);

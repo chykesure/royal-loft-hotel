@@ -45,7 +45,6 @@ import {
   Mail,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuthStore } from '@/store/auth-store';
 
 // ---- Types ----
 interface StaffUser {
@@ -178,9 +177,6 @@ export function StaffPayrollModule() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<StaffProfile | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  const { user } = useAuthStore();
-  const isDeveloper = user?.role === 'developer';
 
   const fetchStaff = useCallback(async () => {
     try {
@@ -402,12 +398,10 @@ export function StaffPayrollModule() {
           <h2 className="text-lg font-semibold">Staff &amp; Payroll</h2>
           <p className="text-sm text-muted-foreground">Manage staff members and payroll information</p>
         </div>
-        {!isDeveloper && (
-          <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={openAddDialog}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Add Staff
-          </Button>
-        )}
+        <Button className="bg-amber-500 hover:bg-amber-600 text-white" onClick={openAddDialog}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Add Staff
+        </Button>
       </div>
 
       {/* Summary Cards */}
@@ -538,26 +532,24 @@ export function StaffPayrollModule() {
                       >
                         {STATUS_LABELS[staff.status] || staff.status}
                       </Badge>
-                      {!isDeveloper && (
-                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0"
-                            onClick={() => openEditDialog(staff)}
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
-                            onClick={() => confirmDelete(staff)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      )}
+                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          onClick={() => openEditDialog(staff)}
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
+                          onClick={() => confirmDelete(staff)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}

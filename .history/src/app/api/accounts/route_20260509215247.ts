@@ -128,7 +128,8 @@ export async function GET(request: NextRequest) {
 }
 
 // --- OVERVIEW HANDLER ---
-// Salaries are EXCLUDED everywhere (they belong to Staff & Payroll module only)
+// Salaries ARE included in the expense total (because payroll/pay creates expense records)
+// Salaries are NOT shown in the recent transactions list
 async function handleOverview(monthStart: Date, monthEnd: Date) {
   // Monthly revenue
   const monthlyBills = await db.bill.findMany({
@@ -150,26 +151,26 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
     total: outstandingRecords.reduce((s: number, b: any) => s + (b.balanceAmount || 0), 0),
   };
 
-  // Grand totals (all-time) — EXCLUDE salaries
+  // Grand totals (all-time) - includes salaries in expense total
   const [grandRev, grandExp] = await Promise.all([
     db.bill.aggregate({ _sum: { totalAmount: true } }),
-    db.expense.aggregate({ _sum: { amount: true, total: true }, where: { category: { not: 'salaries' } } }),
+    db.expense.aggregate({ _sum: { amount: true, total: true } }),
   ] as any);
   const grandTotalRevenue = (grandRev as any)?._sum?.totalAmount || 0;
   const grandTotalExpenses = ((grandExp as any)?._sum?.amount || 0) + ((grandExp as any)?._sum?.total || 0);
   const grandTotalProfit = grandTotalRevenue - grandTotalExpenses;
 
-  // Monthly expenses — EXCLUDE salaries
+  // Monthly expenses (ALL expenses including salaries — payroll/pay creates expense records)
   const monthlyExpRecords = await db.expense.findMany({
-    where: { date: { gte: monthStart, lte: monthEnd }, category: { not: 'salaries' } },
+    where: { date: { gte: monthStart, lte: monthEnd } },
     select: { amount: true, total: true },
   } as any);
   const totalExpenses = monthlyExpRecords.reduce((s: number, e: any) => s + (e.amount || e.total || 0), 0);
 
-  // Net profit = Revenue - non-salary expenses (salaries tracked in Staff & Payroll)
+  // Net profit = Revenue - ALL expenses (salaries already counted in expenses above)
   const netProfit = monthlyRevenue - totalExpenses;
 
-  // Trends (compare to previous month) — EXCLUDE salaries
+  // Trends (compare to previous month)
   const prevStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
   const prevEnd = new Date(monthStart.getFullYear(), monthStart.getMonth(), 0, 23, 59, 59, 999);
   let trends = { revenue: 0, profit: 0 };
@@ -177,7 +178,7 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
   try {
     const prevBills = await db.bill.findMany({ where: { createdAt: { gte: prevStart, lte: prevEnd } }, select: { totalAmount: true } } as any);
     const prevRevenue = prevBills.reduce((s: number, b: any) => s + (b.totalAmount || 0), 0);
-    const prevExp = await db.expense.findMany({ where: { date: { gte: prevStart, lte: prevEnd }, category: { not: 'salaries' } }, select: { amount: true, total: true } } as any);
+    const prevExp = await db.expense.findMany({ where: { date: { gte: prevStart, lte: prevEnd } }, select: { amount: true, total: true } } as any);
     const prevExpTotal = prevExp.reduce((s: number, e: any) => s + (e.amount || e.total || 0), 0);
     const prevProfit = prevRevenue - prevExpTotal;
 
@@ -185,7 +186,7 @@ async function handleOverview(monthStart: Date, monthEnd: Date) {
     if (prevProfit !== 0) trends.profit = Math.round(((netProfit - prevProfit) / Math.abs(prevProfit)) * 100);
   } catch { /* trends stay at 0 */ }
 
-  // Recent transactions — exclude salaries
+  // Recent transactions — exclude salaries from the list (but they're still in the total above)
   const recentPayments = await db.payment.findMany({
     take: 20,
     orderBy: { createdAt: 'desc' },

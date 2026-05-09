@@ -48,26 +48,11 @@ export async function GET(request: NextRequest) {
     if (section === 'alerts') {
       const alerts = await db.securityAlert.findMany({
         orderBy: { createdAt: 'desc' },
+        include: {
+          user: { select: { name: true, email: true } },
+        },
       });
-
-      const userIds = [...new Set(alerts.map((a) => a.userId).filter(Boolean))] as string[];
-      const userMap = new Map<string, { name: string; email: string }>();
-      if (userIds.length > 0) {
-        const users = await db.user.findMany({
-          where: { id: { in: userIds } },
-          select: { id: true, name: true, email: true },
-        });
-        for (const u of users) {
-          userMap.set(u.id, { name: u.name, email: u.email });
-        }
-      }
-
-      const enriched = alerts.map((alert) => ({
-        ...alert,
-        user: alert.userId ? userMap.get(alert.userId) || null : null,
-      }));
-
-      return NextResponse.json(enriched);
+      return NextResponse.json(alerts);
     }
 
     if (section === 'roles') {
@@ -88,11 +73,13 @@ export async function GET(request: NextRequest) {
       const allActions = ['view', 'create', 'edit', 'delete'];
 
       const existingPerms = await db.permission.findMany();
-      const permSet = new Set(existingPerms.map((p) => `${p.module}-${p.action}`));
+
+      // ✅ FIXED — Use Set since you only need .has() for existence checks
+      const permSet = new ap(existingPerms.map((p) => `${p.module}-${p.action}`));
 
       for (const mod of allModules) {
         for (const act of allActions) {
-          if (!permSet.has(`${mod}-${act}`)) {
+          if (!permMap.has(`${mod}-${act}`)) {
             await db.permission.create({ data: { module: mod, action: act } });
           }
         }
@@ -138,11 +125,14 @@ export async function POST(request: NextRequest) {
 
       // ─── AUTO-CREATE StaffProfile so user shows in Staff & Payroll ───
       try {
+        // Generate a unique employee ID: RL-XXX
         const staffCount = await db.staffProfile.count();
-        let counter = staffCount + 1;
-        let finalEmpId = `RL-${String(counter).padStart(3, '0')}`;
+        const empId = `RL-${String(staffCount + 1).padStart(3, '0')}`;
 
+        // Make sure it's unique
+        let finalEmpId = empId;
         let exists = await db.staffProfile.findUnique({ where: { employeeId: finalEmpId } });
+        let counter = staffCount + 1;
         while (exists) {
           counter++;
           finalEmpId = `RL-${String(counter).padStart(3, '0')}`;
@@ -161,13 +151,11 @@ export async function POST(request: NextRequest) {
           },
         });
       } catch (profileErr) {
+        // StaffProfile creation is non-critical — log but don't fail
         console.warn('Could not auto-create StaffProfile (non-critical):', profileErr);
       }
 
-      return NextResponse.json(
-        { id: user.id, email: user.email, name: user.name, role: user.role },
-        { status: 201 }
-      );
+      return NextResponse.json({ id: user.id, email: user.email, name: user.name, role: user.role }, { status: 201 });
     }
 
     if (action === 'init-roles') {
@@ -199,7 +187,7 @@ export async function POST(request: NextRequest) {
 
       for (const mp of modulePermissions) {
         for (const act of mp.actions) {
-          const perm = allPerms.find((p) => p.module === mp.module && p.action === act);
+          const perm = allPerms.find(p => p.module === mp.module && p.action === act);
           if (perm) {
             await db.rolePermission.create({
               data: { roleId, permissionId: perm.id },

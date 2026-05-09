@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-// ─── Robust body parser (Next.js 16 compatible) ───
-async function parseBody(req: NextRequest): Promise<any> {
-  const ct = req.headers.get('content-type') || '';
-  if (ct.includes('application/json')) {
-    return await req.json();
-  }
-  const raw = await req.text();
-  try { return JSON.parse(raw); } catch { throw new Error('Invalid JSON body'); }
-}
-
-// POST /api/payroll/pay
-// Body: { payrollId: string, paymentMethod: string }
 export async function POST(request: NextRequest) {
   try {
     const token = request.cookies.get('auth_token')?.value;
@@ -30,7 +18,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await parseBody(request);
+    const body = await request.json();
     const { payrollId, paymentMethod } = body;
 
     if (!payrollId || !paymentMethod) {
@@ -75,6 +63,7 @@ export async function POST(request: NextRequest) {
 
     const staffName = (payroll as any).staff?.user?.name || 'Unknown Staff';
 
+    // Step 1: Update payroll status to paid
     const updated = await db.payrollRecord.update({
       where: { id: payrollId },
       data: {
@@ -91,7 +80,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Try to create expense record (optional — don't fail if it breaks)
+    // Step 2: Try to create expense record (optional — don't fail payment if it breaks)
     try {
       await db.expense.create({
         data: {

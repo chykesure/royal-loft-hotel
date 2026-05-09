@@ -443,7 +443,7 @@ export function StaffPayrollModule() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: editForm.staffId,
+          staffId: editForm.staffId,
           department: editForm.department,
           position: editForm.position,
           baseSalary: Number(editForm.baseSalary),
